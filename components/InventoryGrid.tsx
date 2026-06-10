@@ -15,6 +15,7 @@ const InventoryGrid: React.FC<InventoryGridProps> = ({ items, productions, crew,
     const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
     const [showCheckoutModal, setShowCheckoutModal] = useState(false);
     const [targetProdId, setTargetProdId] = useState('');
+    const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
     const getIcon = (catName?: string) => {
         switch (catName) {
@@ -43,11 +44,23 @@ const InventoryGrid: React.FC<InventoryGridProps> = ({ items, productions, crew,
         }
     };
 
+    const handleStatusChange = async (itemId: string, status: any) => {
+        await mockSupabase.items.changeStatus(itemId, status);
+        setOpenMenuId(null);
+        onAction();
+    };
+
     return (
         <>
+            {openMenuId && (
+                <div 
+                    className="fixed inset-0 z-20 bg-transparent" 
+                    onClick={() => setOpenMenuId(null)} 
+                />
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                 {items.map(item => (
-                    <div key={item.id} className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-5 hover:border-slate-700 transition-all group">
+                    <div key={item.id} className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-5 hover:border-slate-700 transition-all group relative">
                         <div className="flex justify-between items-start mb-4">
                             <div className={`p-2 rounded-lg flex items-center gap-2 text-sm font-medium ${
                                 item.category?.name === 'Cameras' ? 'bg-red-500/10 text-red-400' :
@@ -58,11 +71,48 @@ const InventoryGrid: React.FC<InventoryGridProps> = ({ items, productions, crew,
                                 {getIcon(item.category?.name)}
                                 {item.category?.name}
                             </div>
-                            <div className="relative group">
-                                <button className="p-1 hover:bg-slate-800 rounded-lg text-slate-500 hover:text-white transition-colors">
+                            <div className="relative">
+                                <button 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenMenuId(openMenuId === item.id ? null : item.id);
+                                    }}
+                                    className="p-1 hover:bg-slate-800 rounded-lg text-slate-500 hover:text-white transition-colors"
+                                >
                                     <MoreVertical size={18} />
                                 </button>
-                                {/* Simple dropdown would go here */}
+                                {openMenuId === item.id && (
+                                    <div className="absolute right-0 mt-1 w-48 bg-slate-900 border border-slate-800 rounded-xl py-1.5 shadow-xl z-30 animate-in fade-in duration-100">
+                                        <p className="px-3 py-1 text-[10px] uppercase tracking-wider font-bold text-slate-500 border-b border-slate-800 mb-1">Quick Actions</p>
+                                        {item.status !== 'available' && (
+                                            <button 
+                                                onClick={() => handleStatusChange(item.id, 'available')}
+                                                className="w-full text-left px-3 py-2 text-xs hover:bg-slate-800 text-green-400 font-semibold flex items-center gap-2"
+                                            >
+                                                <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                                                Set Available
+                                            </button>
+                                        )}
+                                        {item.status !== 'maintenance' && (
+                                            <button 
+                                                onClick={() => handleStatusChange(item.id, 'maintenance')}
+                                                className="w-full text-left px-3 py-2 text-xs hover:bg-slate-800 text-amber-400 font-semibold flex items-center gap-2"
+                                            >
+                                                <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
+                                                Send to Maintenance
+                                            </button>
+                                        )}
+                                        {item.status !== 'lost' && (
+                                            <button 
+                                                onClick={() => handleStatusChange(item.id, 'lost')}
+                                                className="w-full text-left px-3 py-2 text-xs hover:bg-slate-800 text-red-500/90 font-semibold flex items-center gap-2"
+                                            >
+                                                <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                                                Report Lost
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         </div>
 

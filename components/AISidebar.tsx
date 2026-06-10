@@ -61,8 +61,19 @@ const AISidebar: React.FC = () => {
                         <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 text-sm prose prose-invert prose-sm max-w-none">
                             <p className="text-slate-300 whitespace-pre-wrap leading-relaxed">{advice}</p>
                         </div>
-                        <button className="w-full py-2 border border-slate-700 rounded-lg text-xs text-slate-500 hover:text-white transition-colors">
-                            Apply to Project
+                        <button 
+                            onClick={async () => {
+                                try {
+                                    await navigator.clipboard.writeText(advice);
+                                    setPrompt('');
+                                    alert('Equipment specifications copied to clipboard! You can now paste them directly into any project description or draft manifest.');
+                                } catch (err) {
+                                    console.error('Failed to copy text: ', err);
+                                }
+                            }}
+                            className="w-full py-2.5 bg-indigo-600/10 hover:bg-slate-800 text-indigo-400 hover:text-white border border-indigo-500/20 hover:border-slate-700 rounded-xl text-xs font-bold transition-all"
+                        >
+                            Copy Spec List to Clipboard
                         </button>
                     </div>
                 )}

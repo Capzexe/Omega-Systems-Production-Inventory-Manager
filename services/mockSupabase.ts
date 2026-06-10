@@ -47,6 +47,52 @@ export const mockSupabase = {
       MOCK_ITEMS = MOCK_ITEMS.map(i => i.id === id ? { ...i, ...updates } : i);
       return MOCK_ITEMS.find(i => i.id === id);
     },
+    create: async (itemData: Omit<InventoryItem, 'id' | 'created_at'>) => {
+      const newItem: InventoryItem = {
+        ...itemData,
+        id: 'i' + (MOCK_ITEMS.length + 1) + Math.random().toString(36).substr(2, 4),
+        created_at: new Date().toISOString()
+      };
+      MOCK_ITEMS.push(newItem);
+      const log: ActivityLog = {
+        id: Math.random().toString(36).substr(2, 9),
+        item_id: newItem.id,
+        user_id: 'u1', // Admin
+        action: 'Add Equipment',
+        created_at: new Date().toISOString(),
+        details: { model: newItem.model }
+      };
+      MOCK_LOGS = [log, ...MOCK_LOGS];
+      return newItem;
+    },
+    changeStatus: async (id: string, status: ItemStatus) => {
+      const item = MOCK_ITEMS.find(i => i.id === id);
+      if (item) {
+        let action = 'Status Update';
+        if (status === 'maintenance') action = 'Send to Maintenance';
+        else if (status === 'available') action = 'Refurbish / Complete Maintenance';
+
+        const prevStatus = item.status;
+        MOCK_ITEMS = MOCK_ITEMS.map(i => i.id === id ? { 
+          ...i, 
+          status,
+          // Clear assignments if sent to maintenance or lost
+          ...(status === 'maintenance' || status === 'lost' ? { assigned_to_id: undefined, current_production_id: undefined } : {})
+        } : i);
+
+        const log: ActivityLog = {
+          id: Math.random().toString(36).substr(2, 9),
+          item_id: id,
+          user_id: 'u1',
+          action: action,
+          created_at: new Date().toISOString(),
+          details: { previous_status: prevStatus, new_status: status }
+        };
+        MOCK_LOGS = [log, ...MOCK_LOGS];
+        return true;
+      }
+      return false;
+    },
     checkout: async (itemId: string, userId: string, prodId: string) => {
       const item = MOCK_ITEMS.find(i => i.id === itemId);
       if (item && item.status === 'available') {
@@ -62,7 +108,7 @@ export const mockSupabase = {
           user_id: userId,
           action: 'Checkout',
           created_at: new Date().toISOString(),
-          details: { production_id: prodId }
+          details: { production: MOCK_PRODUCTIONS.find(p => p.id === prodId)?.name || 'Unknown' }
         };
         MOCK_LOGS = [log, ...MOCK_LOGS];
         return true;
@@ -75,9 +121,10 @@ export const mockSupabase = {
         const log: ActivityLog = {
           id: Math.random().toString(36).substr(2, 9),
           item_id: itemId,
-          user_id: item.assigned_to_id,
+          user_id: item.assigned_to_id || 'u2',
           action: 'Return',
           created_at: new Date().toISOString(),
+          details: { production: item.current_production_id ? MOCK_PRODUCTIONS.find(p => p.id === item.current_production_id)?.name : undefined }
         };
         MOCK_LOGS = [log, ...MOCK_LOGS];
         MOCK_ITEMS = MOCK_ITEMS.map(i => i.id === itemId ? { 
