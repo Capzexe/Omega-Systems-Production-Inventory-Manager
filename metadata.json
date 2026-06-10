@@ -1,0 +1,7 @@
+{
+  "name": "CineFlow - Production Inventory Manager",
+  "description": "A high-end equipment tracking and inventory management system for film and video production crews. Featuring status tracking, automated check-outs, and comprehensive activity logging.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
