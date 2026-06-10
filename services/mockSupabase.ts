@@ -90,6 +90,7 @@ async function fetchFromApi(endpointQuery: string, options: RequestInit = {}): P
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      'X-Api-Key': import.meta.env.VITE_API_KEY || '',
       ...(options.headers || {})
     }
   });

@@ -33,6 +33,7 @@ jobs:
         run: npm run build
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          VITE_API_KEY: ${{ secrets.VITE_API_KEY }}
 
       # 5. Deploy files inside dist/ to Hostinger via FTP
       - name: Deploy to Hostinger via FTP
