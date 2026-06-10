@@ -144,9 +144,29 @@ const App: React.FC = () => {
         <div className="flex h-screen bg-slate-950 text-slate-100 overflow-hidden">
             {/* Sidebar */}
             <aside className="w-64 border-r border-slate-800 flex flex-col bg-slate-900/50 backdrop-blur-xl shrink-0">
-                <div className="p-6 flex items-center gap-3">
-                    <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center font-bold text-xl shadow-lg shadow-indigo-600/30">C</div>
-                    <span className="text-xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-300">CineFlow</span>
+                <div className="p-6 pb-4 flex items-center justify-start">
+                    <svg viewBox="0 0 170 45" className="w-full h-auto max-w-[200px] select-none" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <linearGradient id="omegaGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stopColor="#12b3ff" />
+                                <stop offset="100%" stopColor="#5bf7ff" />
+                            </linearGradient>
+                        </defs>
+                        <text 
+                            x="5" 
+                            y="34" 
+                            fontFamily="'Inter', system-ui, -apple-system, sans-serif" 
+                            fontSize="38" 
+                            fontWeight="905" 
+                            fontStyle="italic" 
+                            letterSpacing="-1.7px"
+                        >
+                            <tspan fill="#0a4cb2">om</tspan>
+                            <tspan fill="#0082df">eg</tspan>
+                            <tspan fill="url(#omegaGrad)">a</tspan>
+                            <tspan fill="#5bf7ff">.</tspan>
+                        </text>
+                    </svg>
                 </div>
 
                 <nav className="flex-1 px-4 py-2 space-y-1 overflow-y-auto no-scrollbar">
@@ -216,31 +236,8 @@ const App: React.FC = () => {
             {/* Main Content */}
             <main className="flex-1 overflow-y-auto custom-scrollbar relative">
                 {/* Top Header */}
-                <header className="sticky top-0 z-20 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 px-8 py-4 flex items-center justify-between">
-                    <div className="relative w-96">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-                        <input 
-                            type="text" 
-                            placeholder="Search inventory, serials, or crew..."
-                            className="w-full bg-slate-900 border border-slate-700 rounded-full py-2 pl-10 pr-4 focus:ring-2 focus:ring-indigo-500 outline-none text-sm transition-all text-slate-100 placeholder:text-slate-500"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
-                    </div>
+                <header className="sticky top-0 z-20 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 px-8 py-4 flex items-center justify-end">
                     <div className="flex items-center gap-4">
-                        {/* CineBot Launcher */}
-                        <button 
-                            onClick={() => setShowAISidebar(!showAISidebar)}
-                            className={`p-2 rounded-full transition-all relative border ${
-                                showAISidebar 
-                                    ? 'text-indigo-400 bg-indigo-900/20 border-indigo-500/55 shadow-lg shadow-indigo-500/10' 
-                                    : 'text-slate-400 hover:text-white hover:bg-slate-850 border-slate-800'
-                            }`}
-                            title="Open CineBot AI Specs Assistant"
-                        >
-                            <Sparkles size={20} />
-                        </button>
-                        
                         {/* Notification Panel */}
                         <div className="relative">
                             <button 
@@ -318,9 +315,7 @@ const App: React.FC = () => {
                                 </div>
                             </div>
                         </div>
-                    )}
-
-                    {activeTab === 'inventory' && (
+                    )}                    {activeTab === 'inventory' && (
                         <div className="space-y-6 animate-in fade-in duration-300">
                             <div className="flex items-center justify-between">
                                 <div>
@@ -328,12 +323,22 @@ const App: React.FC = () => {
                                     <p className="text-slate-400">Total {items.length} items cataloged across {categories.length} categories.</p>
                                 </div>
                                 <div className="flex items-center gap-3">
+                                    <div className="relative">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+                                        <input 
+                                            type="text" 
+                                            placeholder="Search gear..."
+                                            className="bg-slate-900 border border-slate-700/60 rounded-full py-1.5 pl-9 pr-4 text-xs focus:ring-1 focus:ring-indigo-500/60 outline-none transition-all text-slate-100 placeholder:text-slate-500 w-44 focus:w-60"
+                                            value={searchTerm}
+                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                        />
+                                    </div>
                                     <button 
                                         onClick={() => setShowStatusFilters(!showStatusFilters)}
                                         className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors border ${
                                             showStatusFilters || selectedStatusId
-                                                ? 'bg-indigo-600/20 border-indigo-500/50 text-indigo-400' 
-                                                : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-705'
+                                                ? 'bg-indigo-600/20 border-indigo-500/50 text-indigo-400 font-bold' 
+                                                : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700 font-medium'
                                         }`}
                                     >
                                         <Filter size={18} />
@@ -352,28 +357,31 @@ const App: React.FC = () => {
                                         className={`px-3 py-1.5 rounded-xl text-xs font-semibold uppercase tracking-wider border transition-all ${
                                             !selectedStatusId 
                                                 ? 'bg-indigo-600/35 border-indigo-500/60 text-white' 
-                                                : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:text-slate-250'
+                                                : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:text-slate-200'
                                         }`}
                                     >
-                                        Show All
+                                        Show All ({items.length})
                                     </button>
-                                    {(['available', 'checked_out', 'maintenance', 'lost'] as const).map(stat => (
-                                        <button 
-                                            key={stat}
-                                            onClick={() => setSelectedStatusId(stat)}
-                                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold uppercase tracking-wider border transition-all ${
-                                                selectedStatusId === stat 
-                                                    ? 'bg-indigo-600/35 border-indigo-500/60 text-white' 
-                                                    : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:text-slate-250'
-                                            }`}
-                                        >
-                                            {stat.replace('_', ' ')}
-                                        </button>
-                                    ))}
+                                    {(['available', 'checked_out', 'maintenance', 'lost'] as const).map(stat => {
+                                        const count = items.filter(i => i.status === stat).length;
+                                        return (
+                                            <button 
+                                                key={stat}
+                                                onClick={() => setSelectedStatusId(selectedStatusId === stat ? null : stat)}
+                                                className={`px-3 py-1.5 rounded-xl text-xs font-semibold uppercase tracking-wider border transition-all ${
+                                                    selectedStatusId === stat 
+                                                        ? 'bg-indigo-600/45 border-indigo-500/80 text-white shadow-sm' 
+                                                        : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:text-slate-200'
+                                                }`}
+                                            >
+                                                {stat.replace('_', ' ')} ({count})
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             )}
                             
-                            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-slate-800">
+                            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-slate-800 animate-in fade-in duration-200">
                                 <button 
                                     onClick={() => setSelectedCategoryId(null)}
                                     className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap border transition-all ${
@@ -382,30 +390,35 @@ const App: React.FC = () => {
                                             : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-800'
                                     }`}
                                 >
-                                    All Gear
+                                    All Gear ({items.length})
                                 </button>
-                                {categories.map(cat => (
-                                    <button 
-                                        key={cat.id} 
-                                        onClick={() => setSelectedCategoryId(cat.id)}
-                                        className={`px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap border ${
-                                            selectedCategoryId === cat.id 
-                                                ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' 
-                                                : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-800'
-                                        }`}
-                                    >
-                                        {cat.name}
-                                    </button>
-                                ))}
+                                {categories.map(cat => {
+                                    const catCount = items.filter(i => i.category_id === cat.id).length;
+                                    return (
+                                        <button 
+                                            key={cat.id} 
+                                            onClick={() => setSelectedCategoryId(selectedCategoryId === cat.id ? null : cat.id)}
+                                            className={`px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap border ${
+                                                selectedCategoryId === cat.id 
+                                                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' 
+                                                    : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-800'
+                                            }`}
+                                        >
+                                            {cat.name} ({catCount})
+                                        </button>
+                                    );
+                                })}
                             </div>
 
                             <InventoryGrid 
                                 items={items.filter(i => {
                                     const matchesCategory = !selectedCategoryId || i.category_id === selectedCategoryId;
                                     const matchesStatus = !selectedStatusId || i.status === selectedStatusId;
-                                    const matchesSearch = i.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                                                          i.serial_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                                          i.model.toLowerCase().includes(searchTerm.toLowerCase());
+                                    const matchesSearch = !searchTerm ? true : (
+                                        (i.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                        (i.serial_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                        (i.model || '').toLowerCase().includes(searchTerm.toLowerCase())
+                                    );
                                     return matchesCategory && matchesStatus && matchesSearch;
                                 })} 
                                 onAction={refreshData}
