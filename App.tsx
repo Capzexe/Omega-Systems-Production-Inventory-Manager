@@ -352,24 +352,6 @@ const App: React.FC = () => {
                             )}
                         </div>
 
-                        {/* Hostinger DB Status Badge */}
-                        <button 
-                            onClick={() => {
-                                setDbUrlInput(getBackendUrl());
-                                setConnectionResult(null);
-                                setShowDbModal(true);
-                            }}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition-all border ${
-                                dbMode === 'mysql' 
-                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20' 
-                                    : 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
-                            }`}
-                            title="Database Sync Config"
-                        >
-                            <Database size={14} className={dbMode === 'mysql' ? 'animate-pulse text-emerald-400' : 'text-amber-400'} />
-                            <span>{dbMode === 'mysql' ? 'MySQL Connected' : 'Sandbox DB (Offline)'}</span>
-                        </button>
-
                         <button 
                             onClick={() => setShowAddModal(true)}
                             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-full text-sm font-semibold transition-all shadow-lg shadow-indigo-600/20 active:scale-95"
