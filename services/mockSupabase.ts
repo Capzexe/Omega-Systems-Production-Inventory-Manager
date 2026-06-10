@@ -1,7 +1,27 @@
-
 import { InventoryItem, Category, Profile, Production, ActivityLog, ItemStatus } from '../types';
 
-// Mock Data
+// -----------------------------------------------------------------------------
+// Database Settings (stored in local storage for modular persistence)
+// -----------------------------------------------------------------------------
+export const getDbMode = (): 'mock' | 'mysql' => {
+  return (localStorage.getItem('OMEGA_DB_MODE') as 'mock' | 'mysql') || 'mock';
+};
+
+export const setDbMode = (mode: 'mock' | 'mysql') => {
+  localStorage.setItem('OMEGA_DB_MODE', mode);
+};
+
+export const getBackendUrl = (): string => {
+  return localStorage.getItem('OMEGA_DB_URL') || '/api.php';
+};
+
+export const setBackendUrl = (url: string) => {
+  localStorage.setItem('OMEGA_DB_URL', url);
+};
+
+// -----------------------------------------------------------------------------
+// Fallback / Initial Mock Data (In-Memory Sandbox Database)
+// -----------------------------------------------------------------------------
 const MOCK_CATEGORIES: Category[] = [
   { id: '1', name: 'Cameras', icon: 'Camera' },
   { id: '2', name: 'Lenses', icon: 'Disc' },
@@ -33,9 +53,45 @@ let MOCK_LOGS: ActivityLog[] = [
   { id: 'l2', item_id: 'i3', user_id: 'u2', action: 'Checkout', created_at: new Date(Date.now() - 43200000).toISOString(), details: { production: 'Midnight Streets' } },
 ];
 
+// -----------------------------------------------------------------------------
+// Real MySQL HTTP Fetch Implementation
+// -----------------------------------------------------------------------------
+async function fetchFromApi(endpointQuery: string, options: RequestInit = {}): Promise<any> {
+  const url = getBackendUrl();
+  const delimiter = url.includes('?') ? '&' : '?';
+  const requestUrl = `${url}${delimiter}${endpointQuery}`;
+  
+  const response = await fetch(requestUrl, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {})
+    }
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => ({}));
+    throw new Error(errorBody.error || `HTTP error! status: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+// -----------------------------------------------------------------------------
+// Unified Service Interface (Transparently delegates to MySQL or Mock)
+// -----------------------------------------------------------------------------
 export const mockSupabase = {
   items: {
-    getAll: async () => {
+    getAll: async (): Promise<InventoryItem[]> => {
+      if (getDbMode() === 'mysql') {
+        try {
+          return await fetchFromApi('action=items');
+        } catch (err) {
+          console.warn('MySQL items fetch failed, using sandbox fallback:', err);
+        }
+      }
+      
+      // Fallback
       return MOCK_ITEMS.map(item => ({
         ...item,
         category: MOCK_CATEGORIES.find(c => c.id === item.category_id),
@@ -43,21 +99,60 @@ export const mockSupabase = {
         production: MOCK_PRODUCTIONS.find(p => p.id === item.current_production_id),
       }));
     },
-    update: async (id: string, updates: Partial<InventoryItem>) => {
+
+    update: async (id: string, updates: Partial<InventoryItem>): Promise<InventoryItem | undefined> => {
+      if (getDbMode() === 'mysql') {
+        try {
+          const result = await fetchFromApi('action=change_status', {
+            method: 'POST',
+            body: JSON.stringify({ id, ...updates })
+          });
+          if (result.success) {
+            const fetched = await fetchFromApi('action=items');
+            return fetched.find((i: any) => i.id === id);
+          }
+        } catch (err) {
+          console.error('MySQL status change failed:', err);
+          throw err;
+        }
+      }
+
+      // Mock
       MOCK_ITEMS = MOCK_ITEMS.map(i => i.id === id ? { ...i, ...updates } : i);
       return MOCK_ITEMS.find(i => i.id === id);
     },
-    create: async (itemData: Omit<InventoryItem, 'id' | 'created_at'>) => {
+
+    create: async (itemData: Omit<InventoryItem, 'id' | 'created_at'>): Promise<InventoryItem> => {
+      if (getDbMode() === 'mysql') {
+        try {
+          const result = await fetchFromApi('action=create_item', {
+            method: 'POST',
+            body: JSON.stringify(itemData)
+          });
+          if (result.success && result.id) {
+            const items = await fetchFromApi('action=items');
+            const created = items.find((i: any) => i.id === result.id);
+            if (created) return created;
+          }
+          throw new Error("Could not fetch the newly created equipment.");
+        } catch (err) {
+          console.error('MySQL create item failed:', err);
+          throw err;
+        }
+      }
+
+      // Mock
       const newItem: InventoryItem = {
         ...itemData,
         id: 'i' + (MOCK_ITEMS.length + 1) + Math.random().toString(36).substr(2, 4),
         created_at: new Date().toISOString()
       };
       MOCK_ITEMS.push(newItem);
+      
       const log: ActivityLog = {
         id: Math.random().toString(36).substr(2, 9),
         item_id: newItem.id,
-        user_id: 'u1', // Admin
+        user_id: 'u1',
         action: 'Add Equipment',
         created_at: new Date().toISOString(),
         details: { model: newItem.model }
@@ -65,7 +160,22 @@ export const mockSupabase = {
       MOCK_LOGS = [log, ...MOCK_LOGS];
       return newItem;
     },
-    changeStatus: async (id: string, status: ItemStatus) => {
+
+    changeStatus: async (id: string, status: ItemStatus): Promise<boolean> => {
+      if (getDbMode() === 'mysql') {
+        try {
+          const result = await fetchFromApi('action=change_status', {
+            method: 'POST',
+            body: JSON.stringify({ id, status })
+          });
+          return !!result.success;
+        } catch (err) {
+          console.error('MySQL status modification API failed:', err);
+          throw err;
+        }
+      }
+
+      // Mock
       const item = MOCK_ITEMS.find(i => i.id === id);
       if (item) {
         let action = 'Status Update';
@@ -76,7 +186,6 @@ export const mockSupabase = {
         MOCK_ITEMS = MOCK_ITEMS.map(i => i.id === id ? { 
           ...i, 
           status,
-          // Clear assignments if sent to maintenance or lost
           ...(status === 'maintenance' || status === 'lost' ? { assigned_to_id: undefined, current_production_id: undefined } : {})
         } : i);
 
@@ -93,7 +202,22 @@ export const mockSupabase = {
       }
       return false;
     },
-    checkout: async (itemId: string, userId: string, prodId: string) => {
+
+    checkout: async (itemId: string, userId: string, prodId: string): Promise<boolean> => {
+      if (getDbMode() === 'mysql') {
+        try {
+          const result = await fetchFromApi('action=checkout', {
+            method: 'POST',
+            body: JSON.stringify({ itemId, userId, prodId })
+          });
+          return !!result.success;
+        } catch (err) {
+          console.error('MySQL checkout API failed:', err);
+          throw err;
+        }
+      }
+
+      // Mock
       const item = MOCK_ITEMS.find(i => i.id === itemId);
       if (item && item.status === 'available') {
         const updates: Partial<InventoryItem> = {
@@ -102,6 +226,7 @@ export const mockSupabase = {
           current_production_id: prodId
         };
         MOCK_ITEMS = MOCK_ITEMS.map(i => i.id === itemId ? { ...i, ...updates } : i);
+        
         const log: ActivityLog = {
           id: Math.random().toString(36).substr(2, 9),
           item_id: itemId,
@@ -115,7 +240,22 @@ export const mockSupabase = {
       }
       return false;
     },
-    return: async (itemId: string) => {
+
+    return: async (itemId: string): Promise<boolean> => {
+      if (getDbMode() === 'mysql') {
+        try {
+          const result = await fetchFromApi('action=return', {
+            method: 'POST',
+            body: JSON.stringify({ itemId })
+          });
+          return !!result.success;
+        } catch (err) {
+          console.error('MySQL return API failed:', err);
+          throw err;
+        }
+      }
+
+      // Mock
       const item = MOCK_ITEMS.find(i => i.id === itemId);
       if (item) {
         const log: ActivityLog = {
@@ -127,6 +267,7 @@ export const mockSupabase = {
           details: { production: item.current_production_id ? MOCK_PRODUCTIONS.find(p => p.id === item.current_production_id)?.name : undefined }
         };
         MOCK_LOGS = [log, ...MOCK_LOGS];
+        
         MOCK_ITEMS = MOCK_ITEMS.map(i => i.id === itemId ? { 
           ...i, 
           status: 'available', 
@@ -138,23 +279,72 @@ export const mockSupabase = {
       return false;
     }
   },
+
   categories: {
-    getAll: async () => MOCK_CATEGORIES,
+    getAll: async (): Promise<Category[]> => {
+      if (getDbMode() === 'mysql') {
+        try {
+          return await fetchFromApi('action=categories');
+        } catch (err) {
+          console.warn('MySQL categories fetch failed, using sandbox fallback:', err);
+        }
+      }
+      return MOCK_CATEGORIES;
+    },
   },
+
   profiles: {
-    getAll: async () => MOCK_PROFILES,
-    getMe: async () => MOCK_PROFILES[0], // Simulated logged in user (Admin)
+    getAll: async (): Promise<Profile[]> => {
+      if (getDbMode() === 'mysql') {
+        try {
+          return await fetchFromApi('action=profiles');
+        } catch (err) {
+          console.warn('MySQL profiles fetch failed, using sandbox fallback:', err);
+        }
+      }
+      return MOCK_PROFILES;
+    },
+    getMe: async (): Promise<Profile> => {
+      if (getDbMode() === 'mysql') {
+        try {
+          return await fetchFromApi('action=me');
+        } catch (err) {
+          console.warn('MySQL current user fetch failed, using sandbox fallback:', err);
+        }
+      }
+      return MOCK_PROFILES[0];
+    },
   },
+
   productions: {
-    getAll: async () => MOCK_PRODUCTIONS,
+    getAll: async (): Promise<Production[]> => {
+      if (getDbMode() === 'mysql') {
+        try {
+          return await fetchFromApi('action=productions');
+        } catch (err) {
+          console.warn('MySQL productions fetch failed, using sandbox fallback:', err);
+        }
+      }
+      return MOCK_PRODUCTIONS;
+    },
   },
+
   logs: {
-    getAll: async () => {
-        return MOCK_LOGS.map(log => ({
-            ...log,
-            item: MOCK_ITEMS.find(i => i.id === log.item_id),
-            user: MOCK_PROFILES.find(p => p.id === log.user_id),
-        }));
+    getAll: async (): Promise<ActivityLog[]> => {
+      if (getDbMode() === 'mysql') {
+        try {
+          return await fetchFromApi('action=logs');
+        } catch (err) {
+          console.warn('MySQL logs fetch failed, using sandbox fallback:', err);
+        }
+      }
+      
+      // Fallback
+      return MOCK_LOGS.map(log => ({
+        ...log,
+        item: MOCK_ITEMS.find(i => i.id === log.item_id),
+        user: MOCK_PROFILES.find(p => p.id === log.user_id),
+      }));
     }
   }
 };

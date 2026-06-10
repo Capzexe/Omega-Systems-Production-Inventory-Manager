@@ -15,9 +15,12 @@ import {
     Repeat,
     Sparkles,
     X,
-    Check
+    Check,
+    Database,
+    Globe,
+    RefreshCw
 } from 'lucide-react';
-import { mockSupabase } from './services/mockSupabase';
+import { mockSupabase, getDbMode, setDbMode, getBackendUrl, setBackendUrl } from './services/mockSupabase';
 import { InventoryItem, Profile, Production, ActivityLog, Category, ItemStatus } from './types';
 import InventoryGrid from './components/InventoryGrid';
 import ActivityFeed from './components/ActivityFeed';
@@ -34,6 +37,14 @@ const App: React.FC = () => {
     const [categories, setCategories] = useState<Category[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+
+    // Database connection states
+    const [dbMode, setDbModeState] = useState<'mock' | 'mysql'>('mock');
+    const [dbUrl, setDbUrlState] = useState('/api.php');
+    const [showDbModal, setShowDbModal] = useState(false);
+    const [testingConnection, setTestingConnection] = useState(false);
+    const [connectionResult, setConnectionResult] = useState<{success: boolean; message: string} | null>(null);
+    const [dbUrlInput, setDbUrlInput] = useState('');
 
     // Filter states
     const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
@@ -57,25 +68,79 @@ const App: React.FC = () => {
     useEffect(() => {
         const init = async () => {
             setLoading(true);
-            const [fetchedItems, fetchedUser, fetchedProds, fetchedLogs, fetchedCats] = await Promise.all([
-                mockSupabase.items.getAll(),
-                mockSupabase.profiles.getMe(),
-                mockSupabase.productions.getAll(),
-                mockSupabase.logs.getAll(),
-                mockSupabase.categories.getAll(),
-            ]);
-            setItems(fetchedItems);
-            setUser(fetchedUser);
-            setProductions(fetchedProds);
-            setLogs(fetchedLogs);
-            setCategories(fetchedCats);
-            if (fetchedCats.length > 0) {
-                setNewEquipCategoryId(fetchedCats[0].id);
+            
+            // Hydrate DB states
+            const savedMode = getDbMode();
+            setDbModeState(savedMode);
+            const savedUrl = getBackendUrl();
+            setDbUrlState(savedUrl);
+            setDbUrlInput(savedUrl);
+
+            try {
+                const [fetchedItems, fetchedUser, fetchedProds, fetchedLogs, fetchedCats] = await Promise.all([
+                    mockSupabase.items.getAll(),
+                    mockSupabase.profiles.getMe(),
+                    mockSupabase.productions.getAll(),
+                    mockSupabase.logs.getAll(),
+                    mockSupabase.categories.getAll(),
+                ]);
+                setItems(fetchedItems);
+                setUser(fetchedUser);
+                setProductions(fetchedProds);
+                setLogs(fetchedLogs);
+                setCategories(fetchedCats);
+                if (fetchedCats.length > 0) {
+                    setNewEquipCategoryId(fetchedCats[0].id);
+                }
+            } catch (err) {
+                console.error("Critical hydration error during database startup: ", err);
             }
             setLoading(false);
         };
         init();
     }, []);
+
+    const handleTestConnection = async (targetUrl: string) => {
+        setTestingConnection(true);
+        setConnectionResult(null);
+        try {
+            const trimmedUrl = targetUrl.trim();
+            if (!trimmedUrl) {
+                throw new Error("API base URL is empty.");
+            }
+            const delimiter = trimmedUrl.includes('?') ? '&' : '?';
+            
+            // Try fetching items to verify structure
+            const res = await fetch(`${trimmedUrl}${delimiter}action=items`).catch(e => {
+                throw new Error("Unable to contact PHP endpoint. Double check the address, verify that api.php exists on Hostinger, and check CORS permissions.");
+            });
+            
+            if (res.ok) {
+                const data = await res.json();
+                if (Array.isArray(data)) {
+                    setConnectionResult({
+                        success: true,
+                        message: `Success! Successfully fetched ${data.length} equipment assets from your live Hostinger MySQL tables.`
+                    });
+                } else {
+                    setConnectionResult({
+                        success: true,
+                        message: "Success! Connection succeeded, but the database returned a non-array response."
+                    });
+                }
+            } else {
+                const errBody = await res.json().catch(() => ({}));
+                throw new Error(errBody.error || `HTTP error returned from server (Status ${res.status}). Verify table structures exist in MySQL.`);
+            }
+        } catch (e: any) {
+            setConnectionResult({
+                success: false,
+                message: e.message || "Connection failed."
+            });
+        } finally {
+            setTestingConnection(false);
+        }
+    };
 
     const refreshData = async () => {
         const fetchedItems = await mockSupabase.items.getAll();
@@ -274,6 +339,24 @@ const App: React.FC = () => {
                                 </div>
                             )}
                         </div>
+
+                        {/* Hostinger DB Status Badge */}
+                        <button 
+                            onClick={() => {
+                                setDbUrlInput(getBackendUrl());
+                                setConnectionResult(null);
+                                setShowDbModal(true);
+                            }}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition-all border ${
+                                dbMode === 'mysql' 
+                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20' 
+                                    : 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
+                            }`}
+                            title="Database Sync Config"
+                        >
+                            <Database size={14} className={dbMode === 'mysql' ? 'animate-pulse text-emerald-400' : 'text-amber-400'} />
+                            <span>{dbMode === 'mysql' ? 'MySQL Connected' : 'Sandbox DB (Offline)'}</span>
+                        </button>
 
                         <button 
                             onClick={() => setShowAddModal(true)}
@@ -702,6 +785,157 @@ const App: React.FC = () => {
                             >
                                 Close Manifest
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Hostinger Database Setup Hub Modal */}
+            {showDbModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg p-8 shadow-2xl scale-in-center max-h-[85vh] overflow-y-auto custom-scrollbar">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-2xl font-bold flex items-center gap-2">
+                                <Database className="text-emerald-400" />
+                                Hostinger MySQL Setup Hub
+                            </h2>
+                            <button 
+                                onClick={() => setShowDbModal(false)} 
+                                className="text-slate-500 hover:text-white transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="space-y-6">
+                            {/* Brief Status Header */}
+                            <div className="p-4 bg-slate-950/50 border border-slate-800 rounded-2xl flex items-center justify-between">
+                                <div>
+                                    <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Active Connection Mode</p>
+                                    <p className={`text-sm font-bold ${dbMode === 'mysql' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                        {dbMode === 'mysql' ? 'Live Hostinger MySQL (Active)' : 'Offline Local Sandbox (Demo)'}
+                                    </p>
+                                </div>
+                                <span className={`w-3 h-3 rounded-full ${dbMode === 'mysql' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                            </div>
+
+                            {/* Setup Instructions */}
+                            <div className="space-y-3">
+                                <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">Database Instructions & Setup</h3>
+                                <div className="space-y-2 text-xs text-slate-400 leading-relaxed bg-slate-950/30 p-4 border border-slate-800/50 rounded-2xl">
+                                    <p>
+                                        <strong className="text-slate-200">1. phpMyAdmin Table Setup:</strong><br />
+                                        In Hostinger Panel, go to your Database page. Click <strong className="text-slate-350 font-normal">Enter phpMyAdmin</strong> for <code className="text-indigo-400">u522832521_OmegaSystem</code>. Go to the SQL tab, copy everything inside the file <code className="text-emerald-400">db_setup.sql</code> in this project, paste it in, and click Go/Run.
+                                    </p>
+                                    <p className="mt-2.5">
+                                        <strong className="text-slate-200">2. Upload Bridge Script:</strong><br />
+                                        Upload <code className="text-emerald-400">api.php</code> into your Hostinger host manager folder (usually <code className="text-slate-300">public_html</code>). Double-click to edit and replace the password on Line 12 with your real MySQL password.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Mode selection Toggle */}
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Select Operational Mode</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setDbModeState('mock');
+                                        }}
+                                        className={`p-3.5 rounded-xl border text-xs font-semibold uppercase tracking-wider transition-all flex flex-col items-center gap-1.5 ${
+                                            dbMode === 'mock' 
+                                                ? 'bg-amber-500/10 border-amber-500/50 text-amber-400 font-bold' 
+                                                : 'bg-slate-950/40 border-slate-850 text-slate-500 hover:text-slate-300 hover:border-slate-800'
+                                        }`}
+                                    >
+                                        <span>Sandbox Mode</span>
+                                        <span className="text-[9px] font-normal text-slate-500 capitalize">Uses local mock records</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setDbModeState('mysql');
+                                        }}
+                                        className={`p-3.5 rounded-xl border text-xs font-semibold uppercase tracking-wider transition-all flex flex-col items-center gap-1.5 ${
+                                            dbMode === 'mysql' 
+                                                ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400 font-bold' 
+                                                : 'bg-slate-950/40 border-slate-850 text-slate-500 hover:text-slate-300 hover:border-slate-800'
+                                        }`}
+                                    >
+                                        <span>MySQL Direct API</span>
+                                        <span className="text-[9px] font-normal text-slate-500 capitalize">Queries live Hostinger db</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Endpoint input */}
+                            <div className="space-y-2">
+                                <div className="flex justify-between items-center">
+                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block font-sans">MySQL API endpoint URL</label>
+                                    <span className="text-[9px] text-slate-500">(Supports remote CORS fetching!)</span>
+                                </div>
+                                <input
+                                    type="text"
+                                    value={dbUrlInput}
+                                    onChange={(e) => setDbUrlInput(e.target.value)}
+                                    placeholder="https://ghostwhite-sardine-651089.hostingersite.com/api.php"
+                                    className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3.5 text-xs text-slate-100 placeholder:text-slate-600 focus:ring-1 focus:ring-indigo-500 outline-none transition-all font-mono"
+                                />
+                                <p className="text-[10px] text-slate-500 font-sans leading-relaxed">
+                                    Leave as <code className="text-indigo-400 font-mono">/api.php</code> if you plan to upload the static built pages in the same folder. To connect your live Hostinger DB directly right now in this preview console, enter <code className="text-emerald-400 font-mono">https://ghostwhite-sardine-651089.hostingersite.com/api.php</code> (must have CORS enabled)!
+                                </p>
+                            </div>
+
+                            {/* Testing area */}
+                            <div className="space-y-3 pt-2">
+                                <button
+                                    type="button"
+                                    disabled={testingConnection}
+                                    onClick={() => handleTestConnection(dbUrlInput)}
+                                    className="px-4 py-2 border border-slate-800 hover:border-slate-700 bg-slate-950/50 hover:bg-slate-950 text-xs text-slate-300 font-bold rounded-xl transition-all flex items-center gap-2 justify-center w-full disabled:opacity-40"
+                                >
+                                    {testingConnection ? <Loader2 size={12} className="animate-spin" /> : <Globe size={12} />}
+                                    Test MySQL API Access & Queries
+                                </button>
+
+                                {connectionResult && (
+                                    <div className={`p-4 rounded-xl border text-xs leading-relaxed animate-in slide-in-from-top-1 ${
+                                        connectionResult.success 
+                                            ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-400' 
+                                            : 'bg-red-500/5 border-red-500/20 text-red-400'
+                                    }`}>
+                                        <p className="font-semibold">{connectionResult.success ? '✓ Connection Succesful' : '✕ Connection Error'}</p>
+                                        <p className="mt-1 text-slate-300">{connectionResult.message}</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Save actions */}
+                            <div className="pt-6 border-t border-slate-800 flex justify-end gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowDbModal(false)}
+                                    className="py-2.5 px-6 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-400 text-xs font-semibold transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={async () => {
+                                        setBackendUrl(dbUrlInput);
+                                        setDbUrlState(dbUrlInput);
+                                        setDbMode(dbMode); // Save to local storage
+                                        setDbModeState(dbMode);
+                                        setShowDbModal(false);
+                                        showToast(`Operational mode changed: Connected to ${dbMode === 'mysql' ? 'Hostinger MySQL Database API.' : 'Offline Client Simulator.'}`);
+                                        await refreshData();
+                                    }}
+                                    className="py-2.5 px-6 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-md shadow-indigo-600/10"
+                                >
+                                    Save Operational Mode
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
