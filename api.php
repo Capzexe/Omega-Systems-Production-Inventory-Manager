@@ -9,9 +9,9 @@
 // 1. CONFIGURATION (Please update with your MySQL credentials)
 // -----------------------------------------------------------------------------
 $db_host = "localhost";                     // Usually 'localhost' on Hostinger Web Hosting
-$db_user = "u522832521_OmegaSystem";        // Hostinger MySQL Username
-$db_pass = "j/4&rE=fG5";   // Hostinger MySQL Password
-$db_name = "u522832521_OmegaSystem";       // Hostinger MySQL Database Name
+$db_user = "u522832521_cineflow_user";      // Hostinger MySQL Username
+$db_pass = "CidoSula2233!";                 // Hostinger MySQL Password
+$db_name = "u522832521_cineflow_db";        // Hostinger MySQL Database Name
 
 // -----------------------------------------------------------------------------
 // 2. CORS & HEADERS SETUP
