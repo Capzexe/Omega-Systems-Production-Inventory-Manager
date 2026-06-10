@@ -3,7 +3,10 @@ name: Build & Deploy to Hostinger
 on:
   push:
     branches:
-      - main # Change this to your default branch if it is different (e.g. master)
+      - main
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-and-deploy:
@@ -18,7 +21,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
           cache: 'npm'
 
       # 3. Install dependencies
@@ -32,12 +35,12 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
       # 5. Deploy files inside dist/ to Hostinger via FTP
-      - name: 🚀 FTP Deploy to Hostinger
+      - name: Deploy to Hostinger via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./dist/
-          server-dir: /public_html/ # Adjust paths if your domain is in a subdirectory (e.g., /public_html/cineflow/)
-          dangerous-clean-slate: false # Set to true only if you want to wipe files in public_html that are not in dist
+          server-dir: /public_html/
+          dangerous-clean-slate: false
