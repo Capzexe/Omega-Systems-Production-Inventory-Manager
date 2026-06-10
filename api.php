@@ -31,7 +31,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 // -----------------------------------------------------------------------------
 // 3. DATABASE CONNECTION
 // -----------------------------------------------------------------------------
-$conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
+// Disable strict exception reporting in PHP 8.1+ to handle errors gracefully
+mysqli_report(MYSQLI_REPORT_OFF);
+
+// Suppress warning output so it doesn't corrupt the JSON response stream
+$conn = @new mysqli($db_host, $db_user, $db_pass, $db_name);
 
 // Handle connection failures gracefully
 if ($conn->connect_error) {
@@ -45,6 +49,21 @@ if ($conn->connect_error) {
 
 // Ensure database returns data in UTF-8
 $conn->set_charset("utf8mb4");
+
+// Helper function to safely execute queries and give helper instructions on error
+function safe_query($conn, $sql) {
+    $result = $conn->query($sql);
+    if (!$result) {
+        http_response_code(500);
+        echo json_encode([
+            "error" => "Database query failed! This usually means your database tables are not setup. Please import the 'db_setup.sql' file into your database via phpMyAdmin.",
+            "details" => $conn->error,
+            "query" => $sql
+        ]);
+        exit();
+    }
+    return $result;
+}
 
 // -----------------------------------------------------------------------------
 // 4. UTILITY FUNCTIONS
@@ -76,7 +95,7 @@ switch ($action) {
     // GET: Fetch Categories
     // ==========================================
     case 'categories':
-        $result = $conn->query("SELECT * FROM categories");
+        $result = safe_query($conn, "SELECT * FROM categories");
         $categories = [];
         if ($result) {
             while ($row = $result->fetch_assoc()) {
@@ -90,7 +109,7 @@ switch ($action) {
     // GET: Fetch Profiles
     // ==========================================
     case 'profiles':
-        $result = $conn->query("SELECT * FROM profiles");
+        $result = safe_query($conn, "SELECT * FROM profiles");
         $profiles = [];
         if ($result) {
             while ($row = $result->fetch_assoc()) {
@@ -104,7 +123,7 @@ switch ($action) {
     // GET: Fetch Single User (simulates active logged in user)
     // ==========================================
     case 'me':
-        $result = $conn->query("SELECT * FROM profiles WHERE role='admin' LIMIT 1");
+        $result = safe_query($conn, "SELECT * FROM profiles WHERE role='admin' LIMIT 1");
         if ($result && $result->num_rows > 0) {
             echo json_encode($result->fetch_assoc());
         } else {
@@ -122,7 +141,7 @@ switch ($action) {
     // GET: Fetch Productions
     // ==========================================
     case 'productions':
-        $result = $conn->query("SELECT * FROM productions");
+        $result = safe_query($conn, "SELECT * FROM productions");
         $productions = [];
         if ($result) {
             while ($row = $result->fetch_assoc()) {
@@ -146,7 +165,7 @@ switch ($action) {
                 LEFT JOIN productions pr ON i.current_production_id = pr.id
                 ORDER BY i.created_at DESC";
         
-        $result = $conn->query($sql);
+        $result = safe_query($conn, $sql);
         $items = [];
         
         if ($result) {
@@ -211,7 +230,7 @@ switch ($action) {
                 LEFT JOIN profiles p ON l.user_id = p.id
                 ORDER BY l.created_at DESC";
                 
-        $result = $conn->query($sql);
+        $result = safe_query($conn, $sql);
         $logs = [];
         
         if ($result) {

@@ -1,12 +1,24 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+let aiInstance: GoogleGenAI | null = null;
+
+const getAI = () => {
+  if (!aiInstance) {
+    const key = process.env.API_KEY || process.env.GEMINI_API_KEY;
+    if (!key) {
+      throw new Error('AI Advice: Gemini API Key is not set. To enable AI suggestions, add GEMINI_API_KEY as a secret in GitHub Actions or configure it in your web server.');
+    }
+    aiInstance = new GoogleGenAI({ apiKey: key });
+  }
+  return aiInstance;
+};
 
 export const getEquipmentAdvice = async (sceneDescription: string) => {
   try {
+    const ai = getAI();
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-2.5-flash",
       contents: `Suggest a filming equipment list for the following scene: "${sceneDescription}". 
       Focus on camera choice, lens focal lengths, lighting style, and audio needs. 
       Format as a concise technical recommendation for a professional crew.`,
@@ -15,8 +27,8 @@ export const getEquipmentAdvice = async (sceneDescription: string) => {
       }
     });
     return response.text;
-  } catch (error) {
+  } catch (error: any) {
     console.error("AI Advice Error:", error);
-    return "Unable to get AI advice at this time. Please check your production plan manually.";
+    return `Unable to get AI advice: ${error.message || error}`;
   }
 };
