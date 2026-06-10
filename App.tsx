@@ -156,8 +156,8 @@ const App: React.FC = () => {
 
     const handleCreateEquipment = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newEquipName || !newEquipModel || !newEquipSerial || !newEquipCategoryId) {
-            showToast('Please fill out all fields.');
+        if (!newEquipName || !newEquipCategoryId) {
+            showToast('Please fill out the Name and Category.');
             return;
         }
 
@@ -642,9 +642,8 @@ const App: React.FC = () => {
                             </div>
 
                             <div className="space-y-1">
-                                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Model</label>
+                                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest font-mono">Model <span className="text-slate-500 lowercase font-normal">(optional)</span></label>
                                 <input 
-                                    required
                                     type="text"
                                     placeholder="e.g. Komodo-X"
                                     className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-3 outline-none text-sm font-medium transition-all text-white placeholder:text-slate-600"
@@ -654,9 +653,8 @@ const App: React.FC = () => {
                             </div>
 
                             <div className="space-y-1">
-                                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Serial Number</label>
+                                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest font-mono">Serial Number <span className="text-slate-500 lowercase font-normal">(optional)</span></label>
                                 <input 
-                                    required
                                     type="text"
                                     placeholder="e.g. RK-9040"
                                     className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-3 outline-none text-sm font-medium transition-all text-white placeholder:text-slate-600"

@@ -1,0 +1,41 @@
+name: Build & Deploy to Hostinger
+
+on:
+  push:
+    branches:
+      - main # Change this to your default branch if it is different (e.g. master)
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout the source code
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # 2. Set up Node.js environment
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+
+      # 3. Install dependencies
+      - name: Install Dependencies
+        run: npm ci
+
+      # 4. Build Vite React production bundle
+      - name: Build Application
+        run: npm run build
+
+      # 5. Deploy files inside dist/ to Hostinger via FTP
+      - name: 🚀 FTP Deploy to Hostinger
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./dist/
+          server-dir: /public_html/ # Adjust paths if your domain is in a subdirectory (e.g., /public_html/cineflow/)
+          dangerous-clean-slate: false # Set to true only if you want to wipe files in public_html that are not in dist

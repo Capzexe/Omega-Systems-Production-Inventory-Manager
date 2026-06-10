@@ -4,7 +4,20 @@ import { InventoryItem, Category, Profile, Production, ActivityLog, ItemStatus }
 // Database Settings (stored in local storage for modular persistence)
 // -----------------------------------------------------------------------------
 export const getDbMode = (): 'mock' | 'mysql' => {
-  return (localStorage.getItem('OMEGA_DB_MODE') as 'mock' | 'mysql') || 'mock';
+  const saved = localStorage.getItem('OMEGA_DB_MODE');
+  if (saved === 'mock' || saved === 'mysql') {
+    return saved;
+  }
+  
+  // Auto-detect environment:
+  // If running on local/preview, default to mock sandbox mode
+  // If running on live production Hostinger domain, default directly to mysql mode
+  const isStagingOrDev = 
+    window.location.hostname.includes('localhost') || 
+    window.location.hostname.includes('127.0.0.1') || 
+    window.location.hostname.includes('run.app');
+    
+  return isStagingOrDev ? 'mock' : 'mysql';
 };
 
 export const setDbMode = (mode: 'mock' | 'mysql') => {
@@ -12,7 +25,19 @@ export const setDbMode = (mode: 'mock' | 'mysql') => {
 };
 
 export const getBackendUrl = (): string => {
-  return localStorage.getItem('OMEGA_DB_URL') || '/api.php';
+  const url = localStorage.getItem('OMEGA_DB_URL') || '/api.php';
+  
+  // Resolve relative /api.php to the absolute URL in dev/preview so we don't get 404
+  const isStagingOrDev = 
+    window.location.hostname.includes('localhost') || 
+    window.location.hostname.includes('127.0.0.1') || 
+    window.location.hostname.includes('run.app');
+    
+  if (isStagingOrDev && (url === '/api.php' || !url.startsWith('http'))) {
+    return 'https://ghostwhite-sardine-651089.hostingersite.com/api.php';
+  }
+  
+  return url;
 };
 
 export const setBackendUrl = (url: string) => {

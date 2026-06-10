@@ -282,8 +282,10 @@ switch ($action) {
             }
         }
 
+        $serial_val = !empty($serial) ? "'$serial'" : "NULL";
+
         $sql = "INSERT INTO inventory_items (id, name, model, serial_number, category_id, status) 
-                VALUES ('$id', '$name', '$model', '$serial', '$cat_id', '$status')";
+                VALUES ('$id', '$name', '$model', $serial_val, '$cat_id', '$status')";
         
         if ($conn->query($sql)) {
             // Write to Activity Logs
