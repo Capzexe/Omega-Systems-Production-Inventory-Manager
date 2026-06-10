@@ -9,9 +9,9 @@
 // 1. CONFIGURATION (Please update with your MySQL credentials)
 // -----------------------------------------------------------------------------
 $db_host = "localhost";                     // Usually 'localhost' on Hostinger Web Hosting
-$db_user = "u522832521_OmegaSystem";        // Hostinger MySQL Username
-$db_pass = "j/4&rE=fG5";   // Hostinger MySQL Password
-$db_name = "u522832521_OmegaSystem";       // Hostinger MySQL Database Name
+$db_user = "u123456789_cineflow_user";        // Hostinger MySQL Username
+$db_pass = "CidoSula2233!";   // Hostinger MySQL Password
+$db_name = "u123456789_cineflow_db";       // Hostinger MySQL Database Name
 
 // -----------------------------------------------------------------------------
 // 2. CORS & HEADERS SETUP
@@ -293,7 +293,7 @@ switch ($action) {
         
         // Prevent duplicate serial key crash
         if (!empty($serial)) {
-            $check = $conn->query("SELECT id FROM inventory_items WHERE serial_number = '$serial'");
+            $check = safe_query($conn, "SELECT id FROM inventory_items WHERE serial_number = '$serial'");
             if ($check && $check->num_rows > 0) {
                 http_response_code(400);
                 echo json_encode(["error" => "Serial number '$serial' is already in use by another piece of equipment."]);
@@ -306,14 +306,14 @@ switch ($action) {
         $sql = "INSERT INTO inventory_items (id, name, model, serial_number, category_id, status) 
                 VALUES ('$id', '$name', '$model', $serial_val, '$cat_id', '$status')";
         
-        if ($conn->query($sql)) {
+        if (safe_query($conn, $sql)) {
             // Write to Activity Logs
             $log_id = generate_uuid();
             $u_id = 'u1'; // Default Admin Agent
             $action_text = "Add Equipment";
             $details_json = json_encode(["model" => $model]);
             
-            $conn->query("INSERT INTO activity_logs (id, item_id, user_id, action, details) 
+            safe_query($conn, "INSERT INTO activity_logs (id, item_id, user_id, action, details) 
                           VALUES ('$log_id', '$id', '$u_id', '$action_text', '$details_json')");
             
             echo json_encode(["success" => true, "id" => $id]);

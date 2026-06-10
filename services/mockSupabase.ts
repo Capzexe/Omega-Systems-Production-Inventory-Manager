@@ -96,7 +96,9 @@ async function fetchFromApi(endpointQuery: string, options: RequestInit = {}): P
 
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({}));
-    throw new Error(errorBody.error || `HTTP error! status: ${response.status}`);
+    const detailMsg = errorBody.details ? ` (Database details: ${typeof errorBody.details === 'string' ? errorBody.details : JSON.stringify(errorBody.details)})` : '';
+    const throwMsg = (errorBody.error || `HTTP error! status: ${response.status}`) + detailMsg;
+    throw new Error(throwMsg);
   }
 
   return response.json();
@@ -111,8 +113,9 @@ export const mockSupabase = {
       if (getDbMode() === 'mysql') {
         try {
           return await fetchFromApi('action=items');
-        } catch (err) {
+        } catch (err: any) {
           console.warn('MySQL items fetch failed, using sandbox fallback:', err);
+          window.dispatchEvent(new CustomEvent('database-connection-failed', { detail: err.message }));
         }
       }
       
@@ -136,9 +139,9 @@ export const mockSupabase = {
             const fetched = await fetchFromApi('action=items');
             return fetched.find((i: any) => i.id === id);
           }
-        } catch (err) {
-          console.error('MySQL status change failed:', err);
-          throw err;
+        } catch (err: any) {
+          console.warn('MySQL status change failed. Falling back to sandbox:', err);
+          window.dispatchEvent(new CustomEvent('database-connection-failed', { detail: err.message }));
         }
       }
 
@@ -160,9 +163,9 @@ export const mockSupabase = {
             if (created) return created;
           }
           throw new Error("Could not fetch the newly created equipment.");
-        } catch (err) {
-          console.error('MySQL create item failed:', err);
-          throw err;
+        } catch (err: any) {
+          console.warn('MySQL create item failed. Falling back to sandbox:', err);
+          window.dispatchEvent(new CustomEvent('database-connection-failed', { detail: err.message }));
         }
       }
 
@@ -194,9 +197,9 @@ export const mockSupabase = {
             body: JSON.stringify({ id, status })
           });
           return !!result.success;
-        } catch (err) {
-          console.error('MySQL status modification API failed:', err);
-          throw err;
+        } catch (err: any) {
+          console.warn('MySQL status modification API failed. Falling back to sandbox:', err);
+          window.dispatchEvent(new CustomEvent('database-connection-failed', { detail: err.message }));
         }
       }
 
@@ -236,9 +239,9 @@ export const mockSupabase = {
             body: JSON.stringify({ itemId, userId, prodId })
           });
           return !!result.success;
-        } catch (err) {
-          console.error('MySQL checkout API failed:', err);
-          throw err;
+        } catch (err: any) {
+          console.warn('MySQL checkout API failed. Falling back to sandbox:', err);
+          window.dispatchEvent(new CustomEvent('database-connection-failed', { detail: err.message }));
         }
       }
 
@@ -274,9 +277,9 @@ export const mockSupabase = {
             body: JSON.stringify({ itemId })
           });
           return !!result.success;
-        } catch (err) {
-          console.error('MySQL return API failed:', err);
-          throw err;
+        } catch (err: any) {
+          console.warn('MySQL return API failed. Falling back to sandbox:', err);
+          window.dispatchEvent(new CustomEvent('database-connection-failed', { detail: err.message }));
         }
       }
 
@@ -310,8 +313,9 @@ export const mockSupabase = {
       if (getDbMode() === 'mysql') {
         try {
           return await fetchFromApi('action=categories');
-        } catch (err) {
+        } catch (err: any) {
           console.warn('MySQL categories fetch failed, using sandbox fallback:', err);
+          window.dispatchEvent(new CustomEvent('database-connection-failed', { detail: err.message }));
         }
       }
       return MOCK_CATEGORIES;
@@ -323,8 +327,9 @@ export const mockSupabase = {
       if (getDbMode() === 'mysql') {
         try {
           return await fetchFromApi('action=profiles');
-        } catch (err) {
+        } catch (err: any) {
           console.warn('MySQL profiles fetch failed, using sandbox fallback:', err);
+          window.dispatchEvent(new CustomEvent('database-connection-failed', { detail: err.message }));
         }
       }
       return MOCK_PROFILES;
@@ -333,8 +338,9 @@ export const mockSupabase = {
       if (getDbMode() === 'mysql') {
         try {
           return await fetchFromApi('action=me');
-        } catch (err) {
+        } catch (err: any) {
           console.warn('MySQL current user fetch failed, using sandbox fallback:', err);
+          window.dispatchEvent(new CustomEvent('database-connection-failed', { detail: err.message }));
         }
       }
       return MOCK_PROFILES[0];
@@ -346,8 +352,9 @@ export const mockSupabase = {
       if (getDbMode() === 'mysql') {
         try {
           return await fetchFromApi('action=productions');
-        } catch (err) {
+        } catch (err: any) {
           console.warn('MySQL productions fetch failed, using sandbox fallback:', err);
+          window.dispatchEvent(new CustomEvent('database-connection-failed', { detail: err.message }));
         }
       }
       return MOCK_PRODUCTIONS;
@@ -359,8 +366,9 @@ export const mockSupabase = {
       if (getDbMode() === 'mysql') {
         try {
           return await fetchFromApi('action=logs');
-        } catch (err) {
+        } catch (err: any) {
           console.warn('MySQL logs fetch failed, using sandbox fallback:', err);
+          window.dispatchEvent(new CustomEvent('database-connection-failed', { detail: err.message }));
         }
       }
       

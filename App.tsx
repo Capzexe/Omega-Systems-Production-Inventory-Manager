@@ -100,6 +100,18 @@ const App: React.FC = () => {
         init();
     }, []);
 
+    useEffect(() => {
+        const handleDbError = (e: Event) => {
+            const customErr = e as CustomEvent;
+            const detailMsg = customErr.detail || 'Connection refused or database credentials invalid.';
+            showToast(`⚠️ Live DB Notice: ${detailMsg.includes('credentials') || detailMsg.includes('connection') ? 'Using Local Sandbox. Check credentials / setup in Settings menu!' : detailMsg}`);
+        };
+        window.addEventListener('database-connection-failed', handleDbError);
+        return () => {
+            window.removeEventListener('database-connection-failed', handleDbError);
+        };
+    }, []);
+
     const handleTestConnection = async (targetUrl: string) => {
         setTestingConnection(true);
         setConnectionResult(null);
