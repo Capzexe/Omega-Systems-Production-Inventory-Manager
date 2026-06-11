@@ -36,7 +36,7 @@ const StatsOverview: React.FC<StatsOverviewProps> = ({ items }) => {
     ];
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
             {stats.map((stat, i) => (
                 <div key={i} className="bg-slate-900/50 border border-slate-800 rounded-3xl p-6 hover:translate-y-[-4px] transition-all duration-300">
                     <div className="flex items-center gap-4">

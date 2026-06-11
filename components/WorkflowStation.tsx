@@ -147,7 +147,7 @@ const WorkflowStation: React.FC<WorkflowStationProps> = ({ items, productions, o
                             <span className="text-xs text-slate-500">{filteredItems.length} items found</span>
                         </div>
                         
-                        <div className="max-h-[600px] overflow-y-auto custom-scrollbar divide-y divide-slate-800/50">
+                        <div className="max-h-[50vh] md:max-h-[600px] overflow-y-auto custom-scrollbar divide-y divide-slate-800/50">
                             {filteredItems.length === 0 ? (
                                 <div className="p-20 text-center text-slate-600">
                                     <Package size={48} className="mx-auto mb-4 opacity-10" />
