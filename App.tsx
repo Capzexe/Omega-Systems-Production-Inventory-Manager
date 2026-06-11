@@ -731,39 +731,37 @@ const App: React.FC = () => {
                 {logs.map((log) => (
                   <div
                     key={log.id}
-                    className="p-4 hover:bg-slate-800/30 transition-colors flex items-center justify-between"
+                    className="p-4 hover:bg-slate-800/30 transition-colors"
                   >
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-start gap-3">
                       <div
-                        className={`w-2 h-2 rounded-full ${log.action === "Checkout" ? "bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]" : log.action === "Return" ? "bg-green-500" : "bg-slate-400"}`}
+                        className={`mt-1.5 shrink-0 w-2 h-2 rounded-full ${log.action === "Checkout" ? "bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]" : log.action === "Return" ? "bg-green-500" : "bg-slate-400"}`}
                       />
-                      <div>
-                        <p className="text-sm font-medium">
-                          <span className="text-white">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                          <span className="text-sm font-semibold text-white">
                             {log.user?.full_name}
                           </span>
-                          <span className="text-slate-500 mx-2">performed</span>
-                          <span className="text-indigo-400 font-bold bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20 text-[11px] uppercase mr-2">
+                          <span className="text-slate-500 text-sm">·</span>
+                          <span className="text-indigo-400 font-bold bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20 text-[11px] uppercase">
                             {log.action}
                           </span>
-                          <span className="text-slate-500 mx-2">on</span>
-                          <span className="text-slate-100 underline decoration-slate-700 font-semibold">
-                            {log.item?.name || "Asset system"}
-                          </span>
+                        </div>
+                        <p className="text-sm text-slate-300 mt-0.5 truncate">
+                          {log.item?.name || "Asset system"}
                         </p>
-                        <p className="text-[10px] text-slate-500 font-mono mt-1 uppercase">
-                          ID: {log.id} •{" "}
-                          {new Date(log.created_at).toLocaleString()}
-                        </p>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
+                          <p className="text-[10px] text-slate-500 font-mono uppercase">
+                            {new Date(log.created_at).toLocaleString()}
+                          </p>
+                          {log.details?.production && (
+                            <span className="text-[10px] bg-indigo-900/40 text-indigo-300 px-2 py-0.5 rounded border border-indigo-700/50">
+                              {log.details.production}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                    {log.details?.production && (
-                      <div className="text-right">
-                        <span className="text-[10px] bg-indigo-900/40 text-indigo-300 px-2.5 py-1 rounded-md border border-indigo-700/50">
-                          {log.details.production}
-                        </span>
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
