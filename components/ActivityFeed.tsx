@@ -24,6 +24,8 @@ const ActivityFeed: React.FC<ActivityFeedProps> = ({ logs }) => {
                         </p>
                         <div className="flex items-center gap-1.5 mt-1.5 text-[10px] text-slate-500 font-medium">
                             <Clock size={12} />
+                            {new Date(log.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                            <span className="text-slate-700">·</span>
                             {new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </div>
                     </div>
