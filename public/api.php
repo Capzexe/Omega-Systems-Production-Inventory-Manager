@@ -296,13 +296,13 @@ switch ($action) {
         $stmt = $conn->prepare("SELECT status FROM inventory_items WHERE id = ?");
         $stmt->bind_param("s", $item_id); $stmt->execute();
         $result = $stmt->get_result();
-        if ($row = $result->fetch_assoc() && $row['status'] !== 'available') {
-            $stmt->close();
+        $row = $result->fetch_assoc();
+        $stmt->close();
+        if (!$row || $row['status'] !== 'available') {
             http_response_code(400);
             echo json_encode(["error" => "Equipment is not available for checkout."]);
             break;
         }
-        $stmt->close();
 
         $stmt = $conn->prepare("UPDATE inventory_items SET status = 'checked_out', assigned_to_id = ?, current_production_id = ? WHERE id = ?");
         $stmt->bind_param("sss", $user_id, $production_id, $item_id);
