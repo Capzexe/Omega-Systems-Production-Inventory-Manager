@@ -1,5 +1,7 @@
 // Run only against tests/setup-db.php's isolated database, never production.
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import path from 'node:path';
 const base = 'http://127.0.0.1:8080/api.php';
 let checks = 0;
 function client() {
@@ -27,6 +29,31 @@ const admin = anonymous;
 const login = await admin.call('login', { login: 'admin', password: 'Test-only-password-123!' });
 assert.equal(login.body.user.role, 'admin'); checks++;
 assert.notEqual(admin.cookie, before); checks++;
+// Exercise actual account provisioning, duplicate rejection and password reset.
+const provision = (profile, loginName, password) => spawnSync('php', ['tools/manage-user.php', path.resolve('.local-deploy/test-config.php'), profile, loginName], { input: password, encoding: 'utf8' });
+const newPassword = 'New-user-test-password-123!';
+assert.equal(provision('--create-crew', 'user', newPassword).status, 0, 'CLI creates a regular user'); checks++;
+assert.equal(provision('--create-crew', 'user', 'Different-strong-password-123!').status, 1, 'duplicate username is rejected'); checks++;
+assert.equal(provision('--create-crew', 'weak-user', 'short').status, 1, 'weak password is rejected'); checks++;
+assert.equal(provision('--create-crew', 'bad user', newPassword).status, 1, 'invalid username is rejected'); checks++;
+const normal = client();
+await normal.call('session');
+const { body: normalLogin } = await normal.call('login', { login: 'user', password: newPassword });
+assert.equal(normalLogin.user.role, 'crew', 'new user has no administrator role'); checks++;
+const { body: profiles } = await admin.call('profiles');
+assert.equal(profiles.filter(profile => profile.full_name === 'user').length, 1, 'duplicate creation rolls back its extra profile'); checks++;
+assert.equal(profiles.filter(profile => profile.full_name === 'weak-user').length, 0, 'invalid password creates no profile'); checks++;
+await normal.call('items');
+await normal.call('create_item', { name: 'unauthorized', category_id: '1', status: 'available' }, 403);
+await normal.call('change_status', { id: 'i2', status: 'lost' }, 403);
+await normal.call('return', { itemId: 'i1' }, 403);
+assert.equal(provision('u1', 'user', newPassword).status, 1, 'another profile cannot take over this username'); checks++;
+assert.equal(provision(normalLogin.user.id, 'user', 'Replacement-test-password-123!').status, 0, 'password reset succeeds for the correct profile'); checks++;
+await normal.call('items', undefined, 401);
+await normal.call('session');
+await normal.call('login', { login: 'user', password: newPassword }, 401);
+await normal.call('login', { login: 'user', password: 'Replacement-test-password-123!' });
+await normal.call('logout', {});
 await admin.call('create_item', { name: 'x', category_id: '1', status: 'available', role: 'admin' }, 422);
 await admin.call('create_item', { name: ['nested'], category_id: '1', status: 'available' }, 422);
 await admin.call('create_item', { name: 'x', category_id: '1', status: 'checked_out' }, 422);

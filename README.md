@@ -75,6 +75,14 @@ For a complete local installation:
 
 ## Validation & Security Audit
 
+To create a regular user with a new profile, use the CLI-only command below. It always assigns the `crew` role, refuses duplicate usernames and reads the password from stdin. No credentials belong in Git.
+
+```sh
+php tools/manage-user.php /absolute/private/config.php --create-crew user < /absolute/private/password.txt
+```
+
+On Hostinger, the maintenance script is installed outside the web root in `omega-private/manage-user.php`. Crew users can view inventory and check out/return their own equipment; they cannot add equipment or change maintenance status.
+
 ```sh
 npm run typecheck
 npm run test:security

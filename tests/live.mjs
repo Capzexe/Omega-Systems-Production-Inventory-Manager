@@ -35,15 +35,24 @@ for (const path of ['/.env', '/.git/config', '/db_setup.sql', '/_server/security
 // Optional local-only authenticated smoke check: read production data, then log out.
 if (process.env.OMEGA_SMOKE_CREDENTIALS) {
   const credentials = JSON.parse(fs.readFileSync(process.env.OMEGA_SMOKE_CREDENTIALS, 'utf8'));
+  const loginName = credentials.login || 'omega-admin';
+  const expectedRole = credentials.role || 'admin';
   let authCookie = cookie.split(';')[0];
-  const login = await fetch(origin + '/api.php?action=login', { method: 'POST', headers: { Cookie: authCookie, 'X-CSRF-Token': body.csrfToken, 'Content-Type': 'application/json' }, body: JSON.stringify({ login: 'omega-admin', password: credentials.password }) });
-  check(login.status === 200, 'provisioned administrator can sign in');
+  const login = await fetch(origin + '/api.php?action=login', { method: 'POST', headers: { Cookie: authCookie, 'X-CSRF-Token': body.csrfToken, 'Content-Type': 'application/json' }, body: JSON.stringify({ login: loginName, password: credentials.password }) });
+  check(login.status === 200, 'provisioned user can sign in');
   const user = await login.json();
   authCookie = login.headers.get('set-cookie')?.split(';')[0] || authCookie;
-  check(user.user?.role === 'admin', 'administrator role comes from database');
+  check(user.user?.role === expectedRole, 'expected user role comes from database');
   for (const action of ['items', 'categories', 'productions', 'profiles', 'logs']) {
     const result = await fetch(origin + '/api.php?action=' + action, { headers: { Cookie: authCookie } });
-    check(result.status === 200 && Array.isArray(await result.json()), `${action} loads for signed-in administrator`);
+    check(result.status === 200 && Array.isArray(await result.json()), `${action} loads for signed-in user`);
+  }
+  if (expectedRole === 'crew') {
+    for (const action of ['create_item', 'change_status']) {
+      // Empty bodies cannot mutate inventory even if a permission check regresses.
+      const result = await fetch(origin + '/api.php?action=' + action, { method: 'POST', headers: { Cookie: authCookie, 'X-CSRF-Token': user.csrfToken, 'Content-Type': 'application/json' }, body: '{}' });
+      check(result.status === 403, `${action} is forbidden for a regular user`);
+    }
   }
   const logout = await fetch(origin + '/api.php?action=logout', { method: 'POST', headers: { Cookie: authCookie, 'X-CSRF-Token': user.csrfToken, 'Content-Type': 'application/json' }, body: '{}' });
   check(logout.status === 200, 'logout succeeds');
