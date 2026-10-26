@@ -1,378 +1,124 @@
-﻿<?php
-/**
- * Omega Systems MySQL API
- * Security: API key auth, prepared statements, restricted CORS, safe UUID
- */
-
-// -----------------------------------------------------------------------------
-// 1. CONFIGURATION
-// -----------------------------------------------------------------------------
-$db_host = "localhost";
-$db_user = "u522832521_cineflow_user";
-$db_pass = "CidoSula2233!";
-$db_name = "u522832521_cineflow_db";
-
-// API Key – must match VITE_API_KEY in your frontend .env / GitHub secret.
-define('API_KEY', 'b5pLzsK6VA8zNnKWOsXUNeYdjUsfHJ6aXb34d18HQX0=');
-
-// -----------------------------------------------------------------------------
-// 2. CORS – restrict to your production domain + localhost dev
-// -----------------------------------------------------------------------------
-$allowed_origins = [
-    'https://ghostwhite-sardine-651089.hostingersite.com',
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'http://127.0.0.1:5173',
-];
-$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-$cors_origin = in_array($origin, $allowed_origins)
-    ? $origin
-    : 'https://ghostwhite-sardine-651089.hostingersite.com';
-
-header("Access-Control-Allow-Origin: $cors_origin");
-header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, X-Api-Key");
-header("Content-Type: application/json; charset=UTF-8");
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit(0);
-}
-
-// -----------------------------------------------------------------------------
-// 3. API KEY AUTHENTICATION
-// -----------------------------------------------------------------------------
-$provided_key = $_SERVER['HTTP_X_API_KEY'] ?? '';
-if (!hash_equals(API_KEY, $provided_key)) {
-    http_response_code(401);
-    echo json_encode(["error" => "Unauthorized"]);
-    exit();
-}
-
-// -----------------------------------------------------------------------------
-// 4. DATABASE CONNECTION
-// -----------------------------------------------------------------------------
-mysqli_report(MYSQLI_REPORT_OFF);
-$conn = @new mysqli($db_host, $db_user, $db_pass, $db_name);
-if ($conn->connect_error) {
-    http_response_code(500);
-    echo json_encode(["error" => "Database connection failed. Check server configuration."]);
-    exit();
-}
-$conn->set_charset("utf8mb4");
-
-// -----------------------------------------------------------------------------
-// 5. HELPERS
-// -----------------------------------------------------------------------------
-function generate_uuid(): string {
-    $data = random_bytes(16);
-    $data[6] = chr(ord($data[6]) & 0x0f | 0x40);
-    $data[8] = chr(ord($data[8]) & 0x3f | 0x80);
-    return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
-}
-
-function get_post_data(): ?array {
-    return json_decode(file_get_contents('php://input'), true);
-}
-
-function safe_query($conn, string $sql) {
-    $result = $conn->query($sql);
-    if (!$result) {
-        http_response_code(500);
-        echo json_encode(["error" => "Database query failed. Ensure tables are set up via phpMyAdmin."]);
-        exit();
+<?php
+/** Omega Systems same-origin API. PHP 8.2+, mysqli/mysqlnd, cURL. */
+declare(strict_types=1);
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+require is_file(__DIR__ . '/_server/security.php') ? __DIR__ . '/_server/security.php' : __DIR__ . '/../server/security.php';
+require is_file(__DIR__ . '/_server/database.php') ? __DIR__ . '/_server/database.php' : __DIR__ . '/../server/database.php';
+security_headers();
+$db = null;
+try {
+    $config = load_config();
+    enforce_transport($config);
+    $action = $_GET['action'] ?? '';
+    $methods = ['session' => 'GET', 'login' => 'POST', 'logout' => 'POST', 'me' => 'GET', 'items' => 'GET', 'categories' => 'GET', 'productions' => 'GET', 'profiles' => 'GET', 'logs' => 'GET', 'create_item' => 'POST', 'change_status' => 'POST', 'checkout' => 'POST', 'return' => 'POST', 'advice' => 'POST'];
+    if (!is_string($action) || !isset($methods[$action])) throw new ApiError(404, 'Endpoint not found.');
+    if ($_SERVER['REQUEST_METHOD'] !== $methods[$action]) {
+        header('Allow: ' . $methods[$action]);
+        throw new ApiError(405, 'Method not allowed.');
     }
-    return $result;
+    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    rate_limit($config['private_dir'], 'requests:' . $ip, 180, 60);
+    if ($action === 'login') rate_limit($config['private_dir'], 'login:' . $ip, 10, 900);
+    start_secure_session($config);
+    if ($methods[$action] === 'POST') require_csrf($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
+    $db = connect_database($config);
+    $actor = current_actor($db);
+    if ($action === 'session') respond(['user' => $actor, 'csrfToken' => $_SESSION['csrf']]);
+    $data = $methods[$action] === 'POST' ? request_data() : [];
+    if ($action === 'login') {
+        $input = validate_fields($data, ['login' => ['required' => true, 'max' => 100], 'password' => ['required' => true, 'max' => 72]]);
+        $account = rows($db, 'SELECT profile_id, password_hash, auth_version, disabled FROM omega_accounts WHERE login = ?', [strtolower($input['login'])])[0] ?? null;
+        if ($account) rate_limit($config['private_dir'], 'account-login:' . $account['profile_id'], 20, 900);
+        // A valid dummy hash keeps unknown-login password checks expensive as well.
+        $hash = $account['password_hash'] ?? '$2y$12$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2uheWG/igi.';
+        $valid = password_verify($input['password'], $hash);
+        if (!$account || !$valid || (int) $account['disabled'] !== 0) throw new ApiError(401, 'Invalid sign-in details.');
+        if (password_needs_rehash($hash, PASSWORD_BCRYPT, ['cost' => 12])) query($db, 'UPDATE omega_accounts SET password_hash = ? WHERE profile_id = ?', [password_hash($input['password'], PASSWORD_BCRYPT, ['cost' => 12]), $account['profile_id']]);
+        session_regenerate_id(true);
+        $_SESSION = ['account_id' => $account['profile_id'], 'auth_version' => (int) $account['auth_version'], 'signed_in_at' => time(), 'last_seen' => time(), 'csrf' => bin2hex(random_bytes(32))];
+        respond(['user' => current_actor($db), 'csrfToken' => $_SESSION['csrf']]);
+    }
+    if (!$actor) throw new ApiError(401, 'Sign in to continue.');
+    authorize($actor, $action);
+    if ($methods[$action] === 'POST') rate_limit($config['private_dir'], 'writes:' . $actor['id'], 60, 60);
+    if ($action === 'logout') {
+        validate_fields($data, []);
+        $_SESSION = [];
+        setcookie(session_name(), '', ['expires' => time() - 3600, 'path' => '/', 'secure' => ($config['environment'] ?? 'production') !== 'local', 'httponly' => true, 'samesite' => 'Lax']);
+        session_destroy();
+        respond(['success' => true]);
+    }
+    if ($action === 'me') respond($actor);
+    if ($action === 'items') respond(inventory_rows($db));
+    if ($action === 'logs') respond(activity_rows($db));
+    if ($action === 'categories') respond(rows($db, 'SELECT id, name, icon FROM categories ORDER BY name'));
+    if ($action === 'productions') respond(rows($db, 'SELECT id, name, location, start_date, end_date, status FROM productions ORDER BY start_date DESC'));
+    if ($action === 'profiles') respond(rows($db, 'SELECT id, full_name, role, avatar_url FROM profiles ORDER BY full_name'));
+    if ($action === 'advice') {
+        rate_limit($config['private_dir'], 'advice:' . $actor['id'], 10, 3600);
+        $input = validate_fields($data, ['prompt' => ['required' => true, 'max' => 2000]]);
+        if (empty($config['gemini_api_key']) || !function_exists('curl_init')) throw new ApiError(503, 'AI advice is not configured.');
+        $curl = curl_init('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent');
+        $body = '';
+        curl_setopt_array($curl, [CURLOPT_POST => true, CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'x-goog-api-key: ' . $config['gemini_api_key']], CURLOPT_POSTFIELDS => json_encode(['contents' => [['parts' => [['text' => 'Suggest a concise professional filming equipment list for this scene: ' . $input['prompt']]]]], 'generationConfig' => ['maxOutputTokens' => 1000]], JSON_THROW_ON_ERROR), CURLOPT_CONNECTTIMEOUT => 5, CURLOPT_TIMEOUT => 30, CURLOPT_FOLLOWLOCATION => false, CURLOPT_PROTOCOLS => CURLPROTO_HTTPS, CURLOPT_WRITEFUNCTION => static function ($curl, string $chunk) use (&$body): int { if (strlen($body) + strlen($chunk) > 65536) return 0; $body .= $chunk; return strlen($chunk); }]);
+        $ok = curl_exec($curl);
+        $status = curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+        curl_close($curl);
+        if ($ok === false || $status !== 200) throw new ApiError(502, 'AI provider is temporarily unavailable.');
+        $result = json_decode($body, true, 32, JSON_THROW_ON_ERROR);
+        $text = $result['candidates'][0]['content']['parts'][0]['text'] ?? null;
+        if (!is_string($text)) throw new ApiError(502, 'AI provider returned no advice.');
+        respond(['text' => $text]);
+    }
+    $idRule = ['required' => true, 'max' => 36, 'id' => true];
+    if ($action === 'create_item') {
+        $input = validate_fields($data, ['name' => ['required' => true, 'max' => 100], 'model' => ['max' => 100], 'serial_number' => ['max' => 100], 'category_id' => $idRule, 'status' => ['required' => true, 'values' => ['available', 'maintenance', 'lost']]]);
+        require_record($db, 'categories', $input['category_id']);
+        $id = uuid();
+        $db->begin_transaction();
+        query($db, 'INSERT INTO inventory_items (id, name, model, serial_number, category_id, status) VALUES (?, ?, ?, ?, ?, ?)', [$id, $input['name'], $input['model'], $input['serial_number'] ?: null, $input['category_id'], $input['status']]);
+        audit_log($db, $id, $actor['id'], 'Add Equipment', ['model' => $input['model']]);
+        $db->commit();
+        respond(['success' => true, 'id' => $id], 201);
+    }
+    $rules = match ($action) {
+        'checkout' => ['itemId' => $idRule, 'userId' => $idRule, 'prodId' => $idRule],
+        'return' => ['itemId' => $idRule],
+        'change_status' => ['id' => $idRule, 'status' => ['required' => true, 'values' => ['available', 'maintenance', 'lost']]],
+    };
+    $input = validate_fields($data, $rules);
+    $itemId = $input['itemId'] ?? $input['id'];
+    $db->begin_transaction();
+    $item = rows($db, 'SELECT * FROM inventory_items WHERE id = ? FOR UPDATE', [$itemId])[0] ?? null;
+    if (!$item) throw new ApiError(404, 'Equipment not found.');
+    authorize($actor, $action, $item, $input['userId'] ?? null);
+    if ($action === 'checkout') {
+        if ($item['status'] !== 'available') throw new ApiError(409, 'Equipment is not available for checkout.');
+        require_record($db, 'profiles', $input['userId']);
+        $production = require_record($db, 'productions', $input['prodId']);
+        if (!in_array($production['status'], ['pre-production', 'production'], true)) throw new ApiError(409, 'Production is not accepting equipment.');
+        query($db, "UPDATE inventory_items SET status = 'checked_out', assigned_to_id = ?, current_production_id = ? WHERE id = ?", [$input['userId'], $input['prodId'], $itemId]);
+        audit_log($db, $itemId, $actor['id'], 'Checkout', ['production' => $production['name'], 'assigned_to_id' => $input['userId']]);
+    } elseif ($action === 'return') {
+        if ($item['status'] !== 'checked_out') throw new ApiError(409, 'Only checked-out equipment can be returned.');
+        query($db, "UPDATE inventory_items SET status = 'available', assigned_to_id = NULL, current_production_id = NULL WHERE id = ?", [$itemId]);
+        audit_log($db, $itemId, $actor['id'], 'Return', ['production_id' => $item['current_production_id'], 'previous_assignee' => $item['assigned_to_id']]);
+    } else {
+        // Checkout/return must pass through their own authorized transitions.
+        if ($item['status'] === 'checked_out') throw new ApiError(409, 'Return checked-out equipment before changing its status.');
+        query($db, 'UPDATE inventory_items SET status = ?, assigned_to_id = NULL, current_production_id = NULL WHERE id = ?', [$input['status'], $itemId]);
+        audit_log($db, $itemId, $actor['id'], 'Status Update', ['previous_status' => $item['status'], 'new_status' => $input['status']]);
+    }
+    $db->commit();
+    respond(['success' => true]);
+} catch (ApiError $e) {
+    if ($db instanceof mysqli) $db->rollback();
+    respond(['error' => $e->getMessage()], $e->status);
+} catch (Throwable $e) {
+    if ($db instanceof mysqli) $db->rollback();
+    if ($e instanceof mysqli_sql_exception && $e->getCode() === 1062) respond(['error' => 'A record with that unique value already exists.'], 409);
+    $reference = bin2hex(random_bytes(6));
+    error_log('Omega API [' . $reference . '] ' . get_class($e) . ' code=' . $e->getCode());
+    respond(['error' => 'The request could not be completed.', 'reference' => $reference], 500);
 }
-
-$VALID_STATUSES = ['available', 'checked_out', 'maintenance', 'lost'];
-
-// -----------------------------------------------------------------------------
-// 6. API ROUTER
-// -----------------------------------------------------------------------------
-$action = $_GET['action'] ?? '';
-
-switch ($action) {
-
-    case 'categories':
-        $result = safe_query($conn, "SELECT * FROM categories");
-        $rows = [];
-        while ($row = $result->fetch_assoc()) $rows[] = $row;
-        echo json_encode($rows);
-        break;
-
-    case 'profiles':
-        $result = safe_query($conn, "SELECT * FROM profiles");
-        $rows = [];
-        while ($row = $result->fetch_assoc()) $rows[] = $row;
-        echo json_encode($rows);
-        break;
-
-    case 'me':
-        $result = safe_query($conn, "SELECT * FROM profiles WHERE role='admin' LIMIT 1");
-        echo json_encode($result->num_rows > 0
-            ? $result->fetch_assoc()
-            : ["id"=>"u1","full_name"=>"Alex Rivera","role"=>"admin","avatar_url"=>"https://picsum.photos/seed/alex/100/100"]);
-        break;
-
-    case 'productions':
-        $result = safe_query($conn, "SELECT * FROM productions");
-        $rows = [];
-        while ($row = $result->fetch_assoc()) $rows[] = $row;
-        echo json_encode($rows);
-        break;
-
-    case 'items':
-        $sql = "SELECT i.*,
-                       c.name AS c_name, c.icon AS c_icon,
-                       p.full_name AS p_name, p.role AS p_role, p.avatar_url AS p_avatar,
-                       pr.name AS pr_name, pr.location AS pr_location, pr.status AS pr_status
-                FROM inventory_items i
-                LEFT JOIN categories c ON i.category_id = c.id
-                LEFT JOIN profiles p ON i.assigned_to_id = p.id
-                LEFT JOIN productions pr ON i.current_production_id = pr.id
-                ORDER BY i.created_at DESC";
-        $result = safe_query($conn, $sql);
-        $items = [];
-        while ($row = $result->fetch_assoc()) {
-            $item = [
-                "id" => $row['id'], "name" => $row['name'], "model" => $row['model'],
-                "serial_number" => $row['serial_number'], "category_id" => $row['category_id'],
-                "status" => $row['status'], "current_production_id" => $row['current_production_id'],
-                "assigned_to_id" => $row['assigned_to_id'], "description" => $row['description'],
-                "image_url" => $row['image_url'], "last_serviced_at" => $row['last_serviced_at'],
-                "created_at" => $row['created_at'],
-            ];
-            if ($row['category_id'])
-                $item['category'] = ["id"=>$row['category_id'],"name"=>$row['c_name'],"icon"=>$row['c_icon']];
-            if ($row['assigned_to_id'])
-                $item['assigned_to'] = ["id"=>$row['assigned_to_id'],"full_name"=>$row['p_name'],"role"=>$row['p_role'],"avatar_url"=>$row['p_avatar']];
-            if ($row['current_production_id'])
-                $item['production'] = ["id"=>$row['current_production_id'],"name"=>$row['pr_name'],"location"=>$row['pr_location'],"status"=>$row['pr_status']];
-            $items[] = $item;
-        }
-        echo json_encode($items);
-        break;
-
-    case 'logs':
-        $sql = "SELECT l.*,
-                       i.name AS item_name, i.model AS item_model,
-                       p.full_name AS p_name, p.role AS p_role, p.avatar_url AS p_avatar
-                FROM activity_logs l
-                LEFT JOIN inventory_items i ON l.item_id = i.id
-                LEFT JOIN profiles p ON l.user_id = p.id
-                ORDER BY l.created_at DESC";
-        $result = safe_query($conn, $sql);
-        $logs = [];
-        while ($row = $result->fetch_assoc()) {
-            $log = [
-                "id"=>$row['id'],"item_id"=>$row['item_id'],"user_id"=>$row['user_id'],
-                "action"=>$row['action'],"details"=>json_decode($row['details'],true),
-                "created_at"=>$row['created_at'],
-            ];
-            if ($row['item_id'])
-                $log['item'] = ["id"=>$row['item_id'],"name"=>$row['item_name'],"model"=>$row['item_model']];
-            if ($row['user_id'])
-                $log['user'] = ["id"=>$row['user_id'],"full_name"=>$row['p_name'],"role"=>$row['p_role'],"avatar_url"=>$row['p_avatar']];
-            $logs[] = $log;
-        }
-        echo json_encode($logs);
-        break;
-
-    // ==========================================
-    // POST: Create Equipment
-    // ==========================================
-    case 'create_item':
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); echo json_encode(["error"=>"Method not allowed"]); break; }
-        $data = get_post_data();
-        if (!$data || empty($data['name']) || empty($data['category_id'])) {
-            http_response_code(400); echo json_encode(["error"=>"Required parameters missing."]); break;
-        }
-        $id     = generate_uuid();
-        $name   = trim($data['name']);
-        $model  = isset($data['model']) ? trim($data['model']) : '';
-        $serial = isset($data['serial_number']) ? trim($data['serial_number']) : '';
-        $cat_id = trim($data['category_id']);
-        $status = (isset($data['status']) && in_array($data['status'], $VALID_STATUSES)) ? $data['status'] : 'available';
-
-        if (!empty($serial)) {
-            $stmt = $conn->prepare("SELECT id FROM inventory_items WHERE serial_number = ?");
-            $stmt->bind_param("s", $serial);
-            $stmt->execute();
-            $stmt->store_result();
-            if ($stmt->num_rows > 0) {
-                $stmt->close();
-                http_response_code(400);
-                echo json_encode(["error" => "Serial number '$serial' is already in use."]);
-                break;
-            }
-            $stmt->close();
-        }
-
-        $serial_val = !empty($serial) ? $serial : null;
-        $stmt = $conn->prepare("INSERT INTO inventory_items (id, name, model, serial_number, category_id, status) VALUES (?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param("ssssss", $id, $name, $model, $serial_val, $cat_id, $status);
-        if ($stmt->execute()) {
-            $stmt->close();
-            $log_id = generate_uuid(); $u_id = 'u1'; $action_text = "Add Equipment";
-            $details_json = json_encode(["model" => $model]);
-            $log_stmt = $conn->prepare("INSERT INTO activity_logs (id, item_id, user_id, action, details) VALUES (?, ?, ?, ?, ?)");
-            $log_stmt->bind_param("sssss", $log_id, $id, $u_id, $action_text, $details_json);
-            $log_stmt->execute(); $log_stmt->close();
-            echo json_encode(["success" => true, "id" => $id]);
-        } else {
-            $stmt->close();
-            http_response_code(500);
-            echo json_encode(["error" => "Failed to create equipment."]);
-        }
-        break;
-
-    // ==========================================
-    // POST: Update item status
-    // ==========================================
-    case 'change_status':
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); echo json_encode(["error"=>"Method not allowed"]); break; }
-        $data = get_post_data();
-        if (!$data || empty($data['id']) || empty($data['status'])) {
-            http_response_code(400); echo json_encode(["error"=>"Item ID and Status required."]); break;
-        }
-        $item_id = trim($data['id']);
-        $status  = trim($data['status']);
-        if (!in_array($status, $VALID_STATUSES)) {
-            http_response_code(400); echo json_encode(["error"=>"Invalid status value."]); break;
-        }
-
-        $prev_status = 'unknown';
-        $stmt = $conn->prepare("SELECT status FROM inventory_items WHERE id = ?");
-        $stmt->bind_param("s", $item_id); $stmt->execute();
-        $result = $stmt->get_result();
-        if ($row = $result->fetch_assoc()) $prev_status = $row['status'];
-        $stmt->close();
-
-        $action_label = "Status Update";
-        if ($status === 'maintenance') $action_label = "Send to Maintenance";
-        elseif ($status === 'available') $action_label = "Refurbish / Complete Maintenance";
-
-        if ($status === 'maintenance' || $status === 'lost') {
-            $stmt = $conn->prepare("UPDATE inventory_items SET status = ?, assigned_to_id = NULL, current_production_id = NULL WHERE id = ?");
-            $stmt->bind_param("ss", $status, $item_id);
-        } else {
-            $stmt = $conn->prepare("UPDATE inventory_items SET status = ? WHERE id = ?");
-            $stmt->bind_param("ss", $status, $item_id);
-        }
-        if ($stmt->execute()) {
-            $stmt->close();
-            $log_id = generate_uuid(); $u_id = 'u1';
-            $details_payload = json_encode(["previous_status" => $prev_status, "new_status" => $status]);
-            $log_stmt = $conn->prepare("INSERT INTO activity_logs (id, item_id, user_id, action, details) VALUES (?, ?, ?, ?, ?)");
-            $log_stmt->bind_param("sssss", $log_id, $item_id, $u_id, $action_label, $details_payload);
-            $log_stmt->execute(); $log_stmt->close();
-            echo json_encode(["success" => true]);
-        } else {
-            $stmt->close();
-            http_response_code(500);
-            echo json_encode(["error" => "Status update failed."]);
-        }
-        break;
-
-    // ==========================================
-    // POST: Checkout equipment
-    // ==========================================
-    case 'checkout':
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); echo json_encode(["error"=>"Method not allowed"]); break; }
-        $data = get_post_data();
-        if (!$data || empty($data['itemId']) || empty($data['userId']) || empty($data['prodId'])) {
-            http_response_code(400); echo json_encode(["error"=>"Missing fields (itemId, userId, prodId)"]); break;
-        }
-        $item_id = trim($data['itemId']); $user_id = trim($data['userId']); $production_id = trim($data['prodId']);
-
-        $prod_name = "Assigned Production";
-        $stmt = $conn->prepare("SELECT name FROM productions WHERE id = ?");
-        $stmt->bind_param("s", $production_id); $stmt->execute();
-        $result = $stmt->get_result();
-        if ($row = $result->fetch_assoc()) $prod_name = $row['name'];
-        $stmt->close();
-
-        $stmt = $conn->prepare("SELECT status FROM inventory_items WHERE id = ?");
-        $stmt->bind_param("s", $item_id); $stmt->execute();
-        $result = $stmt->get_result();
-        $row = $result->fetch_assoc();
-        $stmt->close();
-        if (!$row || $row['status'] !== 'available') {
-            http_response_code(400);
-            echo json_encode(["error" => "Equipment is not available for checkout."]);
-            break;
-        }
-
-        $stmt = $conn->prepare("UPDATE inventory_items SET status = 'checked_out', assigned_to_id = ?, current_production_id = ? WHERE id = ?");
-        $stmt->bind_param("sss", $user_id, $production_id, $item_id);
-        if ($stmt->execute()) {
-            $stmt->close();
-            $log_id = generate_uuid();
-            $details_payload = json_encode(["production" => $prod_name]);
-            $log_stmt = $conn->prepare("INSERT INTO activity_logs (id, item_id, user_id, action, details) VALUES (?, ?, ?, 'Checkout', ?)");
-            $log_stmt->bind_param("ssss", $log_id, $item_id, $user_id, $details_payload);
-            $log_stmt->execute(); $log_stmt->close();
-            echo json_encode(["success" => true]);
-        } else {
-            $stmt->close();
-            http_response_code(500);
-            echo json_encode(["error" => "Checkout failed."]);
-        }
-        break;
-
-    // ==========================================
-    // POST: Return equipment
-    // ==========================================
-    case 'return':
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); echo json_encode(["error"=>"Method not allowed"]); break; }
-        $data = get_post_data();
-        if (!$data || empty($data['itemId'])) {
-            http_response_code(400); echo json_encode(["error"=>"Item ID required."]); break;
-        }
-        $item_id = trim($data['itemId']);
-
-        $stmt = $conn->prepare("SELECT assigned_to_id, current_production_id FROM inventory_items WHERE id = ?");
-        $stmt->bind_param("s", $item_id); $stmt->execute();
-        $result = $stmt->get_result();
-        if ($result->num_rows === 0) {
-            $stmt->close(); http_response_code(404); echo json_encode(["error" => "Item not found."]); break;
-        }
-        $item = $result->fetch_assoc(); $stmt->close();
-        $user_id = $item['assigned_to_id'] ?: 'u2';
-        $production_id = $item['current_production_id'];
-
-        $prod_name = null;
-        if ($production_id) {
-            $stmt = $conn->prepare("SELECT name FROM productions WHERE id = ?");
-            $stmt->bind_param("s", $production_id); $stmt->execute();
-            $result = $stmt->get_result();
-            if ($row = $result->fetch_assoc()) $prod_name = $row['name'];
-            $stmt->close();
-        }
-
-        $stmt = $conn->prepare("UPDATE inventory_items SET status = 'available', assigned_to_id = NULL, current_production_id = NULL WHERE id = ?");
-        $stmt->bind_param("s", $item_id);
-        if ($stmt->execute()) {
-            $stmt->close();
-            $log_id = generate_uuid();
-            $details_payload = json_encode(["production" => $prod_name]);
-            $log_stmt = $conn->prepare("INSERT INTO activity_logs (id, item_id, user_id, action, details) VALUES (?, ?, ?, 'Return', ?)");
-            $log_stmt->bind_param("ssss", $log_id, $item_id, $user_id, $details_payload);
-            $log_stmt->execute(); $log_stmt->close();
-            echo json_encode(["success" => true]);
-        } else {
-            $stmt->close();
-            http_response_code(500);
-            echo json_encode(["error" => "Return failed."]);
-        }
-        break;
-
-    default:
-        http_response_code(404);
-        echo json_encode(["status" => "online", "message" => "Omega Systems API active.", "usage" => "Append ?action=items"]);
-        break;
-}
-
-$conn->close();
-?>

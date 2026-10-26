@@ -1,3 +1,4 @@
+import { apiRequest, getSessionUser } from './api';
 import {
   InventoryItem,
   Category,
@@ -10,47 +11,10 @@ import {
 // -----------------------------------------------------------------------------
 // Database Settings (stored in local storage for modular persistence)
 // -----------------------------------------------------------------------------
-export const getDbMode = (): "mock" | "mysql" => {
-  const saved = localStorage.getItem("OMEGA_DB_MODE");
-  if (saved === "mock" || saved === "mysql") {
-    return saved;
-  }
-
-  // Auto-detect environment:
-  // If running on local/preview, default to mock sandbox mode
-  // If running on live production Hostinger domain, default directly to mysql mode
-  const isStagingOrDev =
-    window.location.hostname.includes("localhost") ||
-    window.location.hostname.includes("127.0.0.1") ||
-    window.location.hostname.includes("run.app");
-
-  return isStagingOrDev ? "mock" : "mysql";
-};
-
-export const setDbMode = (mode: "mock" | "mysql") => {
-  localStorage.setItem("OMEGA_DB_MODE", mode);
-};
-
-export const getBackendUrl = (): string => {
-  const url = localStorage.getItem("OMEGA_DB_URL") || "/api.php";
-
-  // Resolve relative /api.php to the absolute URL in dev/preview so we don't get 404
-  const isStagingOrDev =
-    window.location.hostname.includes("localhost") ||
-    window.location.hostname.includes("127.0.0.1") ||
-    window.location.hostname.includes("run.app");
-
-  if (isStagingOrDev && (url === "/api.php" || !url.startsWith("http"))) {
-    return "https://ghostwhite-sardine-651089.hostingersite.com/api.php";
-  }
-
-  return url;
-};
-
-export const setBackendUrl = (url: string) => {
-  localStorage.setItem("OMEGA_DB_URL", url);
-};
-
+// Demo mode is an explicit development-only choice. Production always uses the API.
+export const getDbMode = (): 'mock' | 'mysql' =>
+  import.meta.env.DEV && localStorage.getItem('OMEGA_DB_MODE') === 'mock' ? 'mock' : 'mysql';
+export const getBackendUrl = () => '/api.php';
 // -----------------------------------------------------------------------------
 // Fallback / Initial Mock Data (In-Memory Sandbox Database)
 // -----------------------------------------------------------------------------
@@ -170,36 +134,9 @@ let MOCK_LOGS: ActivityLog[] = [
 // -----------------------------------------------------------------------------
 // Real MySQL HTTP Fetch Implementation
 // -----------------------------------------------------------------------------
-async function fetchFromApi(
-  endpointQuery: string,
-  options: RequestInit = {},
-): Promise<any> {
-  const url = getBackendUrl();
-  const delimiter = url.includes("?") ? "&" : "?";
-  const requestUrl = `${url}${delimiter}${endpointQuery}`;
-
-  const response = await fetch(requestUrl, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      "X-Api-Key": import.meta.env.VITE_API_KEY || "",
-      ...(options.headers || {}),
-    },
-  });
-
-  if (!response.ok) {
-    const errorBody = await response.json().catch(() => ({}));
-    const detailMsg = errorBody.details
-      ? ` (Database details: ${typeof errorBody.details === "string" ? errorBody.details : JSON.stringify(errorBody.details)})`
-      : "";
-    const throwMsg =
-      (errorBody.error || `HTTP error! status: ${response.status}`) + detailMsg;
-    throw new Error(throwMsg);
-  }
-
-  return response.json();
+export async function fetchFromApi(endpointQuery: string, options: RequestInit = {}): Promise<any> {
+  return apiRequest(new URLSearchParams(endpointQuery).get('action') || '', options);
 }
-
 // -----------------------------------------------------------------------------
 // Unified Service Interface (Transparently delegates to MySQL or Mock)
 // -----------------------------------------------------------------------------
@@ -210,15 +147,7 @@ export const mockSupabase = {
         try {
           return await fetchFromApi("action=items");
         } catch (err: any) {
-          console.warn(
-            "MySQL items fetch failed, using sandbox fallback:",
-            err,
-          );
-          window.dispatchEvent(
-            new CustomEvent("database-connection-failed", {
-              detail: err.message,
-            }),
-          );
+          throw err;
         }
       }
 
@@ -241,22 +170,14 @@ export const mockSupabase = {
         try {
           const result = await fetchFromApi("action=change_status", {
             method: "POST",
-            body: JSON.stringify({ id, ...updates }),
+            body: JSON.stringify({ id, status: updates.status }),
           });
           if (result.success) {
             const fetched = await fetchFromApi("action=items");
             return fetched.find((i: any) => i.id === id);
           }
         } catch (err: any) {
-          console.warn(
-            "MySQL status change failed. Falling back to sandbox:",
-            err,
-          );
-          window.dispatchEvent(
-            new CustomEvent("database-connection-failed", {
-              detail: err.message,
-            }),
-          );
+          throw err;
         }
       }
 
@@ -283,15 +204,7 @@ export const mockSupabase = {
           }
           throw new Error("Could not fetch the newly created equipment.");
         } catch (err: any) {
-          console.warn(
-            "MySQL create item failed. Falling back to sandbox:",
-            err,
-          );
-          window.dispatchEvent(
-            new CustomEvent("database-connection-failed", {
-              detail: err.message,
-            }),
-          );
+          throw err;
         }
       }
 
@@ -327,15 +240,7 @@ export const mockSupabase = {
           });
           return !!result.success;
         } catch (err: any) {
-          console.warn(
-            "MySQL status modification API failed. Falling back to sandbox:",
-            err,
-          );
-          window.dispatchEvent(
-            new CustomEvent("database-connection-failed", {
-              detail: err.message,
-            }),
-          );
+          throw err;
         }
       }
 
@@ -386,19 +291,11 @@ export const mockSupabase = {
         try {
           const result = await fetchFromApi("action=checkout", {
             method: "POST",
-            body: JSON.stringify({ itemId, userId, prodId }),
+            body: JSON.stringify({ itemId, userId: getSessionUser()?.id, prodId }),
           });
           return !!result.success;
         } catch (err: any) {
-          console.warn(
-            "MySQL checkout API failed. Falling back to sandbox:",
-            err,
-          );
-          window.dispatchEvent(
-            new CustomEvent("database-connection-failed", {
-              detail: err.message,
-            }),
-          );
+          throw err;
         }
       }
 
@@ -440,15 +337,7 @@ export const mockSupabase = {
           });
           return !!result.success;
         } catch (err: any) {
-          console.warn(
-            "MySQL return API failed. Falling back to sandbox:",
-            err,
-          );
-          window.dispatchEvent(
-            new CustomEvent("database-connection-failed", {
-              detail: err.message,
-            }),
-          );
+          throw err;
         }
       }
 
@@ -493,15 +382,7 @@ export const mockSupabase = {
         try {
           return await fetchFromApi("action=categories");
         } catch (err: any) {
-          console.warn(
-            "MySQL categories fetch failed, using sandbox fallback:",
-            err,
-          );
-          window.dispatchEvent(
-            new CustomEvent("database-connection-failed", {
-              detail: err.message,
-            }),
-          );
+          throw err;
         }
       }
       return MOCK_CATEGORIES;
@@ -514,15 +395,7 @@ export const mockSupabase = {
         try {
           return await fetchFromApi("action=profiles");
         } catch (err: any) {
-          console.warn(
-            "MySQL profiles fetch failed, using sandbox fallback:",
-            err,
-          );
-          window.dispatchEvent(
-            new CustomEvent("database-connection-failed", {
-              detail: err.message,
-            }),
-          );
+          throw err;
         }
       }
       return MOCK_PROFILES;
@@ -532,15 +405,7 @@ export const mockSupabase = {
         try {
           return await fetchFromApi("action=me");
         } catch (err: any) {
-          console.warn(
-            "MySQL current user fetch failed, using sandbox fallback:",
-            err,
-          );
-          window.dispatchEvent(
-            new CustomEvent("database-connection-failed", {
-              detail: err.message,
-            }),
-          );
+          throw err;
         }
       }
       return MOCK_PROFILES[0];
@@ -553,15 +418,7 @@ export const mockSupabase = {
         try {
           return await fetchFromApi("action=productions");
         } catch (err: any) {
-          console.warn(
-            "MySQL productions fetch failed, using sandbox fallback:",
-            err,
-          );
-          window.dispatchEvent(
-            new CustomEvent("database-connection-failed", {
-              detail: err.message,
-            }),
-          );
+          throw err;
         }
       }
       return MOCK_PRODUCTIONS;
@@ -574,12 +431,7 @@ export const mockSupabase = {
         try {
           return await fetchFromApi("action=logs");
         } catch (err: any) {
-          console.warn("MySQL logs fetch failed, using sandbox fallback:", err);
-          window.dispatchEvent(
-            new CustomEvent("database-connection-failed", {
-              detail: err.message,
-            }),
-          );
+          throw err;
         }
       }
 

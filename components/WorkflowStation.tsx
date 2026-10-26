@@ -16,6 +16,7 @@ import {
     ClipboardList
 } from 'lucide-react';
 import { mockSupabase } from '../services/mockSupabase';
+import { getSessionUser } from '../services/api';
 
 interface WorkflowStationProps {
     items: InventoryItem[];
@@ -30,15 +31,17 @@ const WorkflowStation: React.FC<WorkflowStationProps> = ({ items, productions, o
     const [targetProdId, setTargetProdId] = useState('');
     const [isProcessing, setIsProcessing] = useState<string | boolean>(false);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
+    const [error, setError] = useState('');
+    const actor = getSessionUser();
 
     // Items available for the current mode
     const modeItems = mode === 'checkout' 
         ? items.filter(i => i.status === 'available')
-        : items.filter(i => i.status === 'checked_out');
+        : items.filter(i => i.status === 'checked_out' && (!actor || actor.role === 'admin' || i.assigned_to_id === actor.id));
 
     const filteredItems = modeItems.filter(i => 
         i.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        i.serial_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (i.serial_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (mode === 'checkin' && i.production?.name.toLowerCase().includes(searchTerm.toLowerCase()))
     );
 
@@ -53,11 +56,17 @@ const WorkflowStation: React.FC<WorkflowStationProps> = ({ items, productions, o
     const handleCheckoutAction = async () => {
         if (!targetProdId || selectedItems.length === 0) return;
         setIsProcessing(true);
-        for (const item of selectedItems) {
-            await mockSupabase.items.checkout(item.id, 'u2', targetProdId);
+        setError('');
+        let completed = 0;
+        try {
+            for (const item of selectedItems) { await mockSupabase.items.checkout(item.id, actor?.id || 'u2', targetProdId); completed++; }
+            finishAction(`Successfully checked out ${completed} items.`);
+        } catch (err) {
+            setError(`${completed} completed. ${err instanceof Error ? err.message : 'Checkout failed.'} Refresh before retrying.`);
+            onAction();
+        } finally {
+            setIsProcessing(false);
         }
-        setIsProcessing(false);
-        finishAction(`Successfully checked out ${selectedItems.length} items.`);
     };
 
     const handleCheckinAction = async (itemId?: string) => {
@@ -66,11 +75,17 @@ const WorkflowStation: React.FC<WorkflowStationProps> = ({ items, productions, o
         if (itemsToReturn.length === 0) return;
 
         setIsProcessing(itemId || true);
-        for (const item of itemsToReturn) {
-            await mockSupabase.items.return(item.id);
+        setError('');
+        let completed = 0;
+        try {
+            for (const item of itemsToReturn) { await mockSupabase.items.return(item.id); completed++; }
+            finishAction(`Successfully returned ${completed} items.`);
+        } catch (err) {
+            setError(`${completed} completed. ${err instanceof Error ? err.message : 'Return failed.'} Refresh before retrying.`);
+            onAction();
+        } finally {
+            setIsProcessing(false);
         }
-        setIsProcessing(false);
-        finishAction(`Successfully returned ${itemsToReturn.length} items.`);
     };
 
     const finishAction = (msg: string) => {
@@ -83,6 +98,7 @@ const WorkflowStation: React.FC<WorkflowStationProps> = ({ items, productions, o
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
+            {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
             {/* Mode Selector Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-slate-900 border border-slate-800 p-1.5 rounded-3xl w-fit">
                 <button 

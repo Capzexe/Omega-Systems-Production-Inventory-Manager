@@ -1,0 +1,19 @@
+; Apply PHP_INI_SYSTEM settings through hPanel PHP configuration or php.ini.
+; .user.ini cannot change expose_php, disable_functions or allow_url_fopen.
+expose_php = Off
+display_errors = Off
+display_startup_errors = Off
+log_errors = On
+allow_url_include = Off
+allow_url_fopen = Off
+file_uploads = Off
+disable_functions = exec,passthru,shell_exec,system,proc_open,popen,pcntl_exec
+; Replace paths with the exact domain paths; retain required CA/tmp directories.
+; Test under the web SAPI, since CLI configuration is separate.
+open_basedir = /home/ACCOUNT/domains/DOMAIN/public_html:/home/ACCOUNT/domains/DOMAIN/omega-private:/tmp:/etc/ssl/certs:/usr/share/zoneinfo
+session.use_strict_mode = 1
+session.use_only_cookies = 1
+session.use_trans_sid = 0
+session.cookie_secure = 1
+session.cookie_httponly = 1
+session.cookie_samesite = Lax

@@ -1,0 +1,45 @@
+Options -Indexes -MultiViews
+DirectoryIndex index.html
+LimitRequestBody 32768
+
+<IfModule LiteSpeed>
+    php_flag display_errors Off
+    php_flag display_startup_errors Off
+    php_flag log_errors On
+    php_flag session.use_strict_mode On
+    php_flag session.use_only_cookies On
+    php_flag session.use_trans_sid Off
+    php_flag session.cookie_secure On
+    php_flag session.cookie_httponly On
+    php_value session.cookie_samesite Lax
+    php_value post_max_size 32K
+    php_value max_execution_time 40
+    php_value open_basedir "/home/u522832521/domains/ghostwhite-sardine-651089.hostingersite.com/public_html:/home/u522832521/domains/ghostwhite-sardine-651089.hostingersite.com/omega-private:/tmp:/etc/ssl/certs:/usr/share/zoneinfo"
+</IfModule>
+
+RewriteEngine On
+# The canonical hostname avoids Host-header injection in HTTPS redirects.
+RewriteCond %{HTTPS} !=on
+RewriteRule ^ https://ghostwhite-sardine-651089.hostingersite.com%{REQUEST_URI} [R=308,L,NE]
+
+# No upload endpoint exists. Reject multipart bodies before PHP parses them.
+RewriteCond %{HTTP:Content-Type} ^multipart/form-data [NC]
+RewriteRule ^ - [F,L]
+
+# Permit certificate renewal tokens without opening other dotpaths.
+RewriteRule ^\.well-known/acme-challenge/[A-Za-z0-9_-]+$ - [L]
+RewriteRule (^|/)(\.|_server|server|storage|database|tools|tests|node_modules|vendor)(/|$) - [F,L,NC]
+<FilesMatch "(?i)(^\.|\.(sql|ini|log|bak|env|map|ya?ml|lock|zip|tar|gz)$|^(composer|package)(-lock)?\.json$)">
+    Require all denied
+</FilesMatch>
+
+<IfModule mod_headers.c>
+    Header always unset X-Powered-By
+    Header always set Strict-Transport-Security "max-age=31536000" "expr=%{HTTPS} == 'on'"
+    Header always set X-Frame-Options "DENY"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    # Inline styles support React's dynamic styles; scripts remain same-origin only.
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://picsum.photos https://fastly.picsum.photos https://images.unsplash.com; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests"
+</IfModule>

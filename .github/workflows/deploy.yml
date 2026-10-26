@@ -1,50 +1,82 @@
-name: Build & Deploy to Hostinger
+name: Verify & Deploy to Hostinger
 
 on:
+  pull_request:
   push:
-    branches:
-      - main
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+concurrency:
+  group: omega-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  build-and-deploy:
+  verify-and-deploy:
     runs-on: ubuntu-latest
-
-    steps:
-      # 1. Checkout the source code
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      # 2. Set up Node.js environment
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: "npm"
-
-      # 3. Install dependencies
-      - name: Install Dependencies
-        run: npm ci
-
-      # 4. Build Vite React production bundle
-      - name: Build Application
-        run: npm run build
+    timeout-minutes: 15
+    services:
+      mariadb:
+        image: mariadb:10.11
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          VITE_API_KEY: ${{ secrets.VITE_API_KEY }}
-
-      # 5. Deploy files inside dist/ to Hostinger via FTP
-      - name: Deploy to Hostinger via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: '1'
+          MARIADB_ROOT_HOST: '%'
+        ports: ['127.0.0.1:3308:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          port: 21
-          protocol: ftp
-          local-dir: ./dist/
-          server-dir: /public_html/
-          dangerous-clean-slate: false
-          log-level: verbose
+          node-version: 22
+          cache: npm
+      - uses: shivammathur/setup-php@d52fc211a0436f8839a587b3b5b8efddab4744ea # v2
+        with:
+          php-version: '8.3'
+          extensions: mysqli, curl
+          coverage: none
+      - run: npm ci --no-fund
+      - run: npm audit --audit-level=moderate
+      - run: npm run typecheck
+      - run: npm run test:security
+      - name: PHP syntax checks
+        run: find public server tools tests -name '*.php' -print0 | xargs -0 -n 1 php -l
+      - name: API integration tests against isolated database
+        env:
+          OMEGA_TEST_DATABASE: omega_security_test
+          OMEGA_CONFIG_FILE: ${{ github.workspace }}/.local-deploy/test-config.php
+        run: |
+          mkdir -p .local-deploy
+          php tests/setup-db.php
+          php -S 127.0.0.1:8080 -t public > .local-deploy/php.log 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid"' EXIT
+          for attempt in {1..20}; do
+            if curl --silent --fail 'http://127.0.0.1:8080/api.php?action=session' > /dev/null; then break; fi
+            sleep 1
+          done
+          npm run test:api
+      - run: npm run build
+      - run: npm run test:artifact
+      - name: Deploy over restricted SSH
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.HOSTINGER_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/omega_deploy
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          trap 'rm -f ~/.ssh/omega_deploy' EXIT
+          tar -czf release.tar.gz -C dist index.html api.php .htaccess .user.ini _server assets
+          ssh -p 65002 -i ~/.ssh/omega_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes u522832521@46.17.175.181 < release.tar.gz
+      - name: Verify live access controls and security headers
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: node tests/live.mjs

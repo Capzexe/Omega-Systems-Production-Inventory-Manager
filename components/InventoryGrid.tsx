@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { InventoryItem, Production, Profile } from '../types';
 import { Camera, Disc, Sun, Mic, Battery, MoreVertical, LogOut, CheckCircle, AlertCircle, Clock } from 'lucide-react';
 import { mockSupabase } from '../services/mockSupabase';
+import { getSessionUser } from '../services/api';
 
 interface InventoryGridProps {
     items: InventoryItem[];
@@ -16,6 +17,13 @@ const InventoryGrid: React.FC<InventoryGridProps> = ({ items, productions, crew,
     const [showCheckoutModal, setShowCheckoutModal] = useState(false);
     const [targetProdId, setTargetProdId] = useState('');
     const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+    const [error, setError] = useState('');
+    const actor = getSessionUser();
+    const perform = async (operation: () => Promise<void>) => {
+        setError('');
+        try { await operation(); }
+        catch (err) { setError(err instanceof Error ? err.message : 'Operation failed.'); }
+    };
 
     const getIcon = (catName?: string) => {
         switch (catName) {
@@ -52,6 +60,7 @@ const InventoryGrid: React.FC<InventoryGridProps> = ({ items, productions, crew,
 
     return (
         <>
+            {error && <p role="alert" className="mb-4 text-sm text-red-300">{error}</p>}
             {openMenuId && (
                 <div 
                     className="fixed inset-0 z-20 bg-transparent" 
@@ -72,7 +81,7 @@ const InventoryGrid: React.FC<InventoryGridProps> = ({ items, productions, crew,
                                 {item.category?.name}
                             </div>
                             <div className="relative">
-                                <button 
+                                {(actor?.role === 'admin' || !actor) && item.status !== 'checked_out' && <button
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         setOpenMenuId(openMenuId === item.id ? null : item.id);
@@ -80,13 +89,13 @@ const InventoryGrid: React.FC<InventoryGridProps> = ({ items, productions, crew,
                                     className="p-1 hover:bg-slate-800 rounded-lg text-slate-500 hover:text-white transition-colors"
                                 >
                                     <MoreVertical size={18} />
-                                </button>
+                                </button>}
                                 {openMenuId === item.id && (
                                     <div className="absolute right-0 mt-1 w-48 bg-slate-900 border border-slate-800 rounded-xl py-1.5 shadow-xl z-30 animate-in fade-in duration-100">
                                         <p className="px-3 py-1 text-[10px] uppercase tracking-wider font-bold text-slate-500 border-b border-slate-800 mb-1">Quick Actions</p>
                                         {item.status !== 'available' && (
                                             <button 
-                                                onClick={() => handleStatusChange(item.id, 'available')}
+                                                onClick={() => void perform(() => handleStatusChange(item.id, 'available'))}
                                                 className="w-full text-left px-3 py-2 text-xs hover:bg-slate-800 text-green-400 font-semibold flex items-center gap-2"
                                             >
                                                 <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
@@ -95,7 +104,7 @@ const InventoryGrid: React.FC<InventoryGridProps> = ({ items, productions, crew,
                                         )}
                                         {item.status !== 'maintenance' && (
                                             <button 
-                                                onClick={() => handleStatusChange(item.id, 'maintenance')}
+                                                onClick={() => void perform(() => handleStatusChange(item.id, 'maintenance'))}
                                                 className="w-full text-left px-3 py-2 text-xs hover:bg-slate-800 text-amber-400 font-semibold flex items-center gap-2"
                                             >
                                                 <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
@@ -104,7 +113,7 @@ const InventoryGrid: React.FC<InventoryGridProps> = ({ items, productions, crew,
                                         )}
                                         {item.status !== 'lost' && (
                                             <button 
-                                                onClick={() => handleStatusChange(item.id, 'lost')}
+                                                onClick={() => void perform(() => handleStatusChange(item.id, 'lost'))}
                                                 className="w-full text-left px-3 py-2 text-xs hover:bg-slate-800 text-red-500/90 font-semibold flex items-center gap-2"
                                             >
                                                 <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
@@ -148,9 +157,9 @@ const InventoryGrid: React.FC<InventoryGridProps> = ({ items, productions, crew,
                                 <LogOut size={16} />
                                 Check Out
                             </button>
-                        ) : item.status === 'checked_out' ? (
+                        ) : item.status === 'checked_out' && (!actor || actor.role === 'admin' || item.assigned_to_id === actor.id) ? (
                             <button 
-                                onClick={() => handleReturn(item.id)}
+                                onClick={() => void perform(() => handleReturn(item.id))}
                                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-bold transition-all border border-slate-700"
                             >
                                 <CheckCircle size={16} />
@@ -159,7 +168,7 @@ const InventoryGrid: React.FC<InventoryGridProps> = ({ items, productions, crew,
                         ) : (
                             <button disabled className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-900 text-slate-600 text-sm font-bold transition-all border border-slate-800 cursor-not-allowed">
                                 <AlertCircle size={16} />
-                                Under Maintenance
+                                {item.status === 'checked_out' ? 'Assigned to another crew member' : item.status === 'lost' ? 'Reported lost' : 'Under Maintenance'}
                             </button>
                         )}
                     </div>
@@ -212,7 +221,7 @@ const InventoryGrid: React.FC<InventoryGridProps> = ({ items, productions, crew,
                                     Cancel
                                 </button>
                                 <button 
-                                    onClick={() => handleCheckout(selectedItem.id)}
+                                    onClick={() => void perform(() => handleCheckout(selectedItem.id))}
                                     disabled={!targetProdId}
                                     className="flex-1 py-3 px-6 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-600/20"
                                 >
