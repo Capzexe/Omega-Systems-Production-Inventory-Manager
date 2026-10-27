@@ -202,8 +202,9 @@ const WorkflowStation: React.FC<WorkflowStationProps> = ({ items, productions, o
                                             <div className="flex items-center gap-4">
                                                 {mode === 'checkin' && !isSelected && (
                                                     <button 
+                                                        disabled={actor?.read_only}
                                                         onClick={(e) => { e.stopPropagation(); handleCheckinAction(item.id); }}
-                                                        className="hidden md:flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-indigo-600/20 text-xs font-bold transition-all border border-slate-700"
+                                                        className="hidden md:flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-indigo-600/20 text-xs font-bold transition-all border border-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                                     >
                                                         Quick Return
                                                     </button>
@@ -276,7 +277,7 @@ const WorkflowStation: React.FC<WorkflowStationProps> = ({ items, productions, o
 
                         {mode === 'checkout' ? (
                             <button 
-                                disabled={!targetProdId || selectedItems.length === 0 || !!isProcessing}
+                                disabled={!!actor?.read_only || !targetProdId || selectedItems.length === 0 || !!isProcessing}
                                 onClick={handleCheckoutAction}
                                 className="w-full py-5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition-all shadow-xl shadow-indigo-600/20 flex items-center justify-center gap-3 disabled:opacity-20 disabled:cursor-not-allowed text-lg"
                             >
@@ -291,7 +292,7 @@ const WorkflowStation: React.FC<WorkflowStationProps> = ({ items, productions, o
                             </button>
                         ) : (
                             <button 
-                                disabled={selectedItems.length === 0 || !!isProcessing}
+                                disabled={!!actor?.read_only || selectedItems.length === 0 || !!isProcessing}
                                 onClick={() => handleCheckinAction()}
                                 className="w-full py-5 rounded-2xl bg-green-600 hover:bg-green-500 text-white font-bold transition-all shadow-xl shadow-green-600/20 flex items-center justify-center gap-3 disabled:opacity-20 disabled:cursor-not-allowed text-lg"
                             >

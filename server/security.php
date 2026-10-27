@@ -164,6 +164,9 @@ function validate_fields(array $data, array $rules): array
 
 function authorize(array $actor, string $action, ?array $item = null, ?string $assignee = null): void
 {
+    if (($actor['read_only'] ?? false) && !in_array($action, ['me', 'items', 'categories', 'productions', 'profiles', 'logs', 'logout'], true)) {
+        throw new ApiError(403, 'Demo access is read-only. Sign in with a team account to make changes.');
+    }
     if (!in_array($actor['role'], ['admin', 'crew'], true)) throw new ApiError(403, 'Access denied.');
     if (in_array($action, ['create_item', 'change_status'], true) && $actor['role'] !== 'admin') throw new ApiError(403, 'Administrator access required.');
     if ($action === 'checkout' && $assignee !== null && $actor['role'] !== 'admin' && $assignee !== $actor['id']) throw new ApiError(403, 'You may only check out equipment for yourself.');

@@ -34,6 +34,12 @@ authorize($crew, 'checkout', null, 'u2');
 authorize($crew, 'return', ['assigned_to_id' => 'u2']);
 authorize($admin, 'return', ['assigned_to_id' => 'u2']);
 check(true, 'authorized transitions allowed');
+$visitor = ['id' => 'visitor', 'role' => 'crew', 'read_only' => true];
+foreach (['create_item', 'change_status', 'checkout', 'return', 'advice'] as $action) {
+    rejects(fn() => authorize($visitor, $action, ['assigned_to_id' => 'visitor'], 'visitor'), 403, 'visitor cannot perform ' . $action);
+}
+foreach (['me', 'items', 'categories', 'productions', 'profiles', 'logs', 'logout'] as $action) authorize($visitor, $action);
+check(true, 'visitor reads and logout remain available');
 $_SESSION = ['csrf' => str_repeat('a', 64)];
 require_csrf(str_repeat('a', 64));
 rejects(fn() => require_csrf(''), 419, 'missing CSRF rejected');

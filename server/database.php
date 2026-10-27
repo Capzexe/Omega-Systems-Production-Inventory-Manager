@@ -24,13 +24,16 @@ function rows(mysqli $db, string $sql, array $params = []): array
 function current_actor(mysqli $db): ?array
 {
     if (!isset($_SESSION['account_id'])) return null;
-    $found = rows($db, 'SELECT p.id, p.full_name, p.role, p.avatar_url, a.auth_version FROM omega_accounts a JOIN profiles p ON p.id = a.profile_id WHERE a.profile_id = ? AND a.disabled = 0', [$_SESSION['account_id']]);
+    $found = rows($db, 'SELECT p.id, p.full_name, p.role, p.avatar_url, a.auth_version, a.login AS account_login FROM omega_accounts a JOIN profiles p ON p.id = a.profile_id WHERE a.profile_id = ? AND a.disabled = 0', [$_SESSION['account_id']]);
     if (!$found || (int) $found[0]['auth_version'] !== ($_SESSION['auth_version'] ?? -1)) {
         unset($_SESSION['account_id'], $_SESSION['auth_version']);
         return null;
     }
     $actor = $found[0];
-    unset($actor['auth_version']);
+    // This login is intentionally advertised on the sign-in page. Its write
+    // restriction is recomputed from the database for every authenticated request.
+    $actor['read_only'] = strtolower($actor['account_login']) === 'user';
+    unset($actor['auth_version'], $actor['account_login']);
     return $actor;
 }
 

@@ -2,7 +2,7 @@
 
 A production equipment tracker for film and video teams. It helps warehouse staff and crews see available gear, assign equipment to productions, record returns and maintenance, and trace equipment movements to signed-in users.
 
-**Live application:** [Omega Systems](https://ghostwhite-sardine-651089.hostingersite.com) — account required. No public demo credentials.
+**Live application:** [Omega Systems](https://ghostwhite-sardine-651089.hostingersite.com). Choose **Explore demo** on the sign-in page for public, read-only visitor access. Team members sign in with their individual accounts.
 
 ## Key Features
 
@@ -81,7 +81,7 @@ To create a regular user with a new profile, use the CLI-only command below. It 
 php tools/manage-user.php /absolute/private/config.php --create-crew user < /absolute/private/password.txt
 ```
 
-On Hostinger, the maintenance script is installed outside the web root in `omega-private/manage-user.php`. Crew users can view inventory and check out/return their own equipment; they cannot add equipment or change maintenance status.
+On Hostinger, the maintenance script is installed outside the web root in `omega-private/manage-user.php`. Individual crew users can view inventory and check out/return their own equipment; they cannot add equipment or change maintenance status. The reserved `user` login is publicly advertised for visitors and is always read-only. Use individual usernames for operational crew accounts. The public demo credentials in `services/demo.ts` are intentionally visible; administrator, database and other private credentials must never be published.
 
 ```sh
 npm run typecheck

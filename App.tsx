@@ -371,7 +371,7 @@ const App: React.FC = () => {
               )}
             </div>
 
-            {user?.role === 'admin' && <button
+            {user?.role === 'admin' && !user.read_only && <button
               onClick={() => setShowAddModal(true)}
               className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-3 md:px-4 py-2 rounded-full text-sm font-semibold transition-all shadow-lg shadow-indigo-600/20 active:scale-95"
             >
@@ -380,6 +380,8 @@ const App: React.FC = () => {
             </button>}
           </div>
         </header>
+
+        {user?.read_only && <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-slate-800 bg-slate-900 px-4 md:px-8 py-3 text-sm"><span className="font-semibold text-indigo-200">Visitor demo</span><span className="text-slate-300">Explore freely. Inventory is read-only.</span></div>}
 
         <div className="p-4 md:p-8 pb-24 md:pb-8">
           {activeTab === "dashboard" && (
@@ -919,6 +921,7 @@ const App: React.FC = () => {
                             </div>
                           </div>
                           <button
+                            disabled={user?.read_only}
                             onClick={async () => {
                               if (
                                 confirm(
@@ -932,7 +935,7 @@ const App: React.FC = () => {
                                 );
                               }
                             }}
-                            className="text-xs text-indigo-400 hover:text-indigo-300 font-bold bg-indigo-600/10 px-3 py-1.5 rounded-lg border border-indigo-500/20 hover:bg-indigo-600/20 transition-all"
+                            className="text-xs text-indigo-400 hover:text-indigo-300 font-bold bg-indigo-600/10 px-3 py-1.5 rounded-lg border border-indigo-500/20 hover:bg-indigo-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             Recall Asset
                           </button>

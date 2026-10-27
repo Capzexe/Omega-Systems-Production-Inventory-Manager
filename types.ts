@@ -8,6 +8,7 @@ export interface Profile {
   full_name: string;
   role: Role;
   avatar_url?: string;
+  read_only?: boolean;
 }
 
 export interface Category {

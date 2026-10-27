@@ -81,7 +81,7 @@ const InventoryGrid: React.FC<InventoryGridProps> = ({ items, productions, crew,
                                 {item.category?.name}
                             </div>
                             <div className="relative">
-                                {(actor?.role === 'admin' || !actor) && item.status !== 'checked_out' && <button
+                                {!actor?.read_only && (actor?.role === 'admin' || !actor) && item.status !== 'checked_out' && <button
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         setOpenMenuId(openMenuId === item.id ? null : item.id);
@@ -148,16 +148,17 @@ const InventoryGrid: React.FC<InventoryGridProps> = ({ items, productions, crew,
 
                         {item.status === 'available' ? (
                             <button 
+                                disabled={actor?.read_only}
                                 onClick={() => {
                                     setSelectedItem(item);
                                     setShowCheckoutModal(true);
                                 }}
-                                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold transition-all shadow-lg shadow-indigo-600/10"
+                                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold transition-all shadow-lg shadow-indigo-600/10 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 <LogOut size={16} />
-                                Check Out
+                                {actor?.read_only ? 'View-only access' : 'Check Out'}
                             </button>
-                        ) : item.status === 'checked_out' && (!actor || actor.role === 'admin' || item.assigned_to_id === actor.id) ? (
+                        ) : item.status === 'checked_out' && !actor?.read_only && (!actor || actor.role === 'admin' || item.assigned_to_id === actor.id) ? (
                             <button 
                                 onClick={() => void perform(() => handleReturn(item.id))}
                                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-bold transition-all border border-slate-700"

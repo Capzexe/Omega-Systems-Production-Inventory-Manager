@@ -43,6 +43,7 @@ if (process.env.OMEGA_SMOKE_CREDENTIALS) {
   const user = await login.json();
   authCookie = login.headers.get('set-cookie')?.split(';')[0] || authCookie;
   check(user.user?.role === expectedRole, 'expected user role comes from database');
+  if (loginName === 'user') check(user.user?.read_only === true, 'public demo identity is read-only');
   for (const action of ['items', 'categories', 'productions', 'profiles', 'logs']) {
     const result = await fetch(origin + '/api.php?action=' + action, { headers: { Cookie: authCookie } });
     check(result.status === 200 && Array.isArray(await result.json()), `${action} loads for signed-in user`);
@@ -52,6 +53,12 @@ if (process.env.OMEGA_SMOKE_CREDENTIALS) {
       // Empty bodies cannot mutate inventory even if a permission check regresses.
       const result = await fetch(origin + '/api.php?action=' + action, { method: 'POST', headers: { Cookie: authCookie, 'X-CSRF-Token': user.csrfToken, 'Content-Type': 'application/json' }, body: '{}' });
       check(result.status === 403, `${action} is forbidden for a regular user`);
+    }
+  }
+  if (loginName === 'user') {
+    for (const action of ['checkout', 'return', 'advice']) {
+      const result = await fetch(origin + '/api.php?action=' + action, { method: 'POST', headers: { Cookie: authCookie, 'X-CSRF-Token': user.csrfToken, 'Content-Type': 'application/json' }, body: '{}' });
+      check(result.status === 403, `${action} is forbidden for the public visitor`);
     }
   }
   const logout = await fetch(origin + '/api.php?action=logout', { method: 'POST', headers: { Cookie: authCookie, 'X-CSRF-Token': user.csrfToken, 'Content-Type': 'application/json' }, body: '{}' });

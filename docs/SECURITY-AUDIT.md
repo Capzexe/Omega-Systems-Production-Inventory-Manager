@@ -79,6 +79,12 @@ node tests/live.mjs
 
 GitHub Actions provisions its own disposable MariaDB instance and runs these tests automatically. Tests include malicious names to verify that text is bound as data, not interpreted as SQL.
 
+## Public visitor access — 27 October 2026
+
+At the owner's request, the sign-in page now advertises the reserved `user` credentials and offers an **Explore demo** button. These credentials are intentionally public, unlike administrator, database and provider credentials. `current_actor()` derives `read_only` from the account's database login on every request, including existing sessions and ordinary password sign-ins. The request body cannot grant write access. `authorize()` uses an explicit read/logout allowlist for this identity, denying checkout, return, equipment edits and paid AI requests before mutation. Individual crew accounts retain their previous operational permissions. The UI labels visitor mode and disables inventory mutations.
+
+Tests cover public-user write rejection, continued individual-crew operations, logout, API state transitions and the published visitor sign-in. Demo credentials must be updated in `services/demo.ts` if the reserved account's password is rotated. The public view intentionally exposes the same team inventory and activity reads previously available to this user; it is not a separate tenant or a synthetic dataset.
+
 ## Primary guidance
 
 - [PHP: securing session INI settings](https://www.php.net/manual/en/session.security.ini.php)
